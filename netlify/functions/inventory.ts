@@ -75,10 +75,9 @@ export const handler: Handler = async (event, context) => {
         : { id: itemId };
       const updatePayload: any = { ...restOfItem };
 
-      // Si es un upsert, necesitamos el _id en el payload si no lo tiene.
-      if (!existingItem) {
-        updatePayload._id = itemId; // Establecemos el _id al id del frontend para el upsert/creación
-      }
+      // 🛑 CORRECCIÓN CLAVE: Se eliminó el bloque condicional 'if (!existingItem) { updatePayload._id = itemId; }'
+      // que causaba el error 'Cast to ObjectId failed'. Mongoose ahora generará
+      // automáticamente el _id (ObjectId) cuando se cree un documento nuevo (upsert).
 
       // 3. Aplanar el Map 'stockByLocation' en notación de puntos y asegurar que el valor es un número
       if (stockByLocation && typeof stockByLocation === "object") {

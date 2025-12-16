@@ -422,7 +422,7 @@ const InventoryComponent: React.FC<InventoryProps> = ({
   }, [inventoryItems, orderSearchTerm]);
 
   const groupedItems = useMemo(() => {
-    return filteredItems.reduce((acc, item) => {
+    const groups = filteredItems.reduce((acc, item) => {
       const category = item.category || "Uncategorized";
       if (!acc[category]) {
         acc[category] = [];
@@ -430,6 +430,13 @@ const InventoryComponent: React.FC<InventoryProps> = ({
       acc[category].push(item);
       return acc;
     }, {} as { [key: string]: InventoryItem[] });
+
+    // 🛑 AÑADIDO: Ordenar alfabéticamente los artículos dentro de cada categoría
+    Object.keys(groups).forEach((category) => {
+      groups[category].sort((a, b) => a.name.localeCompare(b.name));
+    });
+
+    return groups;
   }, [filteredItems]);
 
   const analysisGroupedItems = useMemo(() => {

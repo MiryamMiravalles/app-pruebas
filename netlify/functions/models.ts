@@ -1,3 +1,4 @@
+// netlify/functions/models.ts
 import mongoose, { Schema } from "mongoose";
 
 // ----------------------------------------------------
@@ -17,10 +18,8 @@ const InventoryItemSchema = new Schema(
     // previniendo errores de actualización sutiles en Mongoose.
     stockByLocation: { type: Map, of: Number, minimize: false },
   },
-  // 🛑 CORRECCIÓN CLAVE 3: Dejamos que Mongoose gestione el _id interno (ObjectId)
-  // pero aseguramos que el ID del frontend se mantenga en el root.
-  // Quitamos `_id: false` para que Mongoose cree su propio _id, y confiamos en
-  // el transform para mapear `id` al exterior.
+  // 🛑 CORRECCIÓN CLAVE 3: Mantenemos { timestamps: true } y permitimos que Mongoose
+  // cree su propio _id (ObjectId), usando el campo 'id' para el UUID del frontend.
   { timestamps: true }
 );
 
@@ -53,7 +52,8 @@ const PurchaseOrderSchema = new Schema(
       },
     ],
   },
-  { _id: false, timestamps: true }
+  // 🛑 CORRECCIÓN DE BUENA PRÁCTICA: Se eliminó `_id: false`. Si _id está definido como String, Mongoose lo respeta.
+  { timestamps: true }
 );
 
 PurchaseOrderSchema.set("toJSON", {
@@ -79,7 +79,7 @@ const InventoryRecordItemSchema = new Schema(
     consumption: Number,
     stockByLocationSnapshot: { type: Map, of: Number, minimize: false }, // 🛑 Añadido minimize: false
   },
-  { _id: false }
+  { _id: false } // Mantenido para sub-documentos si no se usa ID
 );
 
 // Esquema completo para InventoryRecord
@@ -91,7 +91,8 @@ const InventoryRecordSchema = new Schema(
     type: String,
     items: [InventoryRecordItemSchema],
   },
-  { _id: false, timestamps: true }
+  // 🛑 CORRECCIÓN DE BUENA PRÁCTICA: Se eliminó `_id: false`. Si _id está definido como String, Mongoose lo respeta.
+  { timestamps: true }
 );
 
 InventoryRecordSchema.set("toJSON", {

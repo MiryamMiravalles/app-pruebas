@@ -147,6 +147,8 @@ const convertToCsv = (record: InventoryRecordDocument): string => {
     // Encabezados para Snapshot (Inventario por Ubicación)
     let header = "Articulo";
     header += `${separator}P.U. s/IVA`;
+    // 🛑 CORRECCIÓN: AÑADIDO: Columna Valor Total en el encabezado
+    header += `${separator}VALOR TOTAL`;
     locations.forEach((loc) => {
       header += `${separator}${loc.toUpperCase()}`;
     });
@@ -160,18 +162,28 @@ const convertToCsv = (record: InventoryRecordDocument): string => {
         lastCategory = item.category;
       }
 
+      // CÁLCULO DEL STOCK TOTAL
       const totalStock = Object.values(
         item.stockByLocationSnapshot || {}
       ).reduce((sum: number, val: any) => sum + (Number(val) || 0), 0);
 
       // Precio (asegurado por la corrección en models.ts)
-      let price =
+      const price =
         item.pricePerUnitWithoutIVA !== undefined
-          ? Number(item.pricePerUnitWithoutIVA).toFixed(2).replace(".", ",")
-          : "0,00";
+          ? Number(item.pricePerUnitWithoutIVA)
+          : 0;
+
+      // 🛑 CORRECCIÓN: CÁLCULO DEL VALOR TOTAL
+      const totalValue = price * totalStock;
+
+      let priceFormatted = Number(price).toFixed(2).replace(".", ",");
+      let totalValueFormatted = Number(totalValue).toFixed(2).replace(".", ",");
 
       // Fila de Datos del Artículo
-      let row = `"${item.name}"${separator}${price}`;
+      let row = `"${item.name}"${separator}${priceFormatted}`;
+
+      // 🛑 CORRECCIÓN: AÑADIDO: Valor Total
+      row += `${separator}${totalValueFormatted}`;
 
       // Iterar sobre la lista de ubicaciones FIJAS
       locations.forEach((loc) => {
@@ -183,7 +195,7 @@ const convertToCsv = (record: InventoryRecordDocument): string => {
         row += `${separator}${stock}`;
       });
 
-      // Añadir el Total al final
+      // Añadir el Total (stock) al final
       row += `${separator}${Number(totalStock).toFixed(2).replace(".", ",")}\n`;
       csv += row;
     });
@@ -200,7 +212,8 @@ export const handler: Handler = async (event, context) => {
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type, Content-Disposition",
-    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    // 🛑 CORRECCIÓN: Permitir PUT para manejo robusto de upsert
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   };
 
   if (event.httpMethod === "OPTIONS") {
@@ -302,7 +315,8 @@ export const handler: Handler = async (event, context) => {
       };
     }
 
-    if (event.httpMethod === "POST") {
+    // 🛑 CORRECCIÓN: Aceptar tanto POST (crear) como PUT (actualizar) para guardar el historial
+    if (event.httpMethod === "POST" || event.httpMethod === "PUT") {
       const data = JSON.parse(event.body || "{}");
       const recordToSave: any = { ...data };
 
@@ -381,6 +395,7 @@ export const handler: Handler = async (event, context) => {
       }
     }
 
+    // Si el método no es ninguno de los anteriores
     return { statusCode: 405, headers, body: "Method Not Allowed" };
   } catch (error: any) {
     console.error("Error executing history function:", error);
