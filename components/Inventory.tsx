@@ -913,16 +913,6 @@ const InventoryComponent: React.FC<InventoryProps> = ({
       };
     });
 
-    const updatesForReset: { name: string; stock: number }[] =
-      inventoryItems.map((item) => ({
-        name: item.name,
-        stock: 0,
-      }));
-
-    if (updatesForReset.length > 0) {
-      await onBulkUpdateInventoryItems(updatesForReset, "set");
-    }
-
     const formattedDate = new Date().toLocaleDateString("es-ES", {
       day: "2-digit",
       month: "2-digit",

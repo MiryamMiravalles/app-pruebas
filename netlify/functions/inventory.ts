@@ -127,12 +127,16 @@ export const handler: Handler = async (event, context) => {
         const currentStockInAlmacen =
           Number(existingItem.stockByLocation.get("Almacén")) || 0;
 
-        // 2. Calcular el nuevo stock para la ubicación "Almacén"
         if (mode === "add") {
           newStockValue = currentStockInAlmacen + inputStock;
         } else if (mode === "set") {
-          // Si mode es 'set', usamos el stock directamente
-          newStockValue = inputStock;
+          // MODIFICACIÓN: Si el stock enviado es 0, mantenemos el valor actual de Almacén
+          // para que no se borre durante el análisis semanal.
+          if (inputStock === 0) {
+            newStockValue = currentStockInAlmacen;
+          } else {
+            newStockValue = inputStock;
+          }
         }
 
         // 3. Crear el objeto de actualización para "stockByLocation.Almacén"
