@@ -1,10 +1,14 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  # Añade esto para asegurar compatibilidad de versiones
+  environment = { NODE_VERSION = "20" } 
 
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
+  # También puedes definir la versión de Node para las funciones específicamente
+  node_version = "20"
 
 # CORRECCIÓN CLAVE para Netlify: Mapea /api/* a /.netlify/functions/*
 [[redirects]]
