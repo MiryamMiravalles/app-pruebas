@@ -96,7 +96,21 @@ interface CategoryAccordionProps {
   itemCount: number;
   initialOpen?: boolean;
 }
-
+// Función para calcular el valor total de un pedido
+const calculateOrderTotal = (
+  order: PurchaseOrder,
+  inventoryItems: InventoryItem[]
+): number => {
+  return order.items.reduce((total, item) => {
+    // Obtenemos el precio unitario del artículo correspondiente en el inventario actual
+    const itemDetail = inventoryItems.find(
+      (i) => i.id === item.inventoryItemId
+    );
+    // Usamos el precio del inventario, ya que el precio en OrderItem no se mantiene actualizado en este flujo.
+    const price = itemDetail?.pricePerUnitWithoutIVA || 0;
+    return total + item.quantity * price;
+  }, 0);
+};
 const CategoryAccordion: React.FC<CategoryAccordionProps> = ({
   title,
   children,
@@ -331,8 +345,27 @@ const InventoryComponent: React.FC<InventoryProps> = ({
     return (Number(item.pricePerUnitWithoutIVA) || 0) * totalStock;
   };
 
+  // 🛑 [INICIO DE FRAGMENTO 1 CORREGIDO]
+
+  // Función para calcular el valor total de un pedido
+  const calculateOrderTotal = (
+    order: PurchaseOrder,
+    inventoryItems: InventoryItem[]
+  ): number => {
+    return order.items.reduce((total, item) => {
+      const itemDetail = inventoryItems.find(
+        (i) => i.id === item.inventoryItemId
+      );
+      // Usamos el precio del inventario, ya que el precio en OrderItem no se mantiene actualizado en este flujo.
+      const price = itemDetail?.pricePerUnitWithoutIVA || 0;
+      return total + item.quantity * price;
+    }, 0);
+  };
+  // 🛑 [FIN DE FRAGMENTO 1 CORREGIDO]
+
   const validInventoryHistory = useMemo(() => {
     if (!Array.isArray(inventoryHistory)) return [];
+    // ... el resto de tu useMemo
 
     return inventoryHistory.sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
@@ -1032,9 +1065,8 @@ const InventoryComponent: React.FC<InventoryProps> = ({
       if (consumedItems.length === 0) {
         return (
           <div className="text-center py-5 text-slate-500">
-                       {" "}
+                     
             <p>No se registró consumo de artículos en esta categoría.</p>       
-             {" "}
           </div>
         );
       }
@@ -1909,126 +1941,205 @@ const InventoryComponent: React.FC<InventoryProps> = ({
       )}
       {activeTab === "orders" && (
         <div>
-          {/* Contenedor que alinea el botón a la derecha */}
+                    {/* Contenedor que alinea el botón a la derecha */}       
           <div className="flex justify-end mb-4">
+                     
             <button
               onClick={() => openOrderModal()}
               className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1 px-2 rounded-lg flex items-center justify-center gap-2 text-sm transition duration-300 h-7"
               title="Nuevo Pedido"
             >
-              <PlusIcon className="h-4 w-4" />
-              <span>Nuevo Pedido</span>
+                            <PlusIcon className="h-4 w-4" />           
+              <span>Nuevo Pedido</span>         
             </button>
+                   
           </div>
+                 
           {/* 🛑 INICIO: Vista de ESCRITORIO (Tabla tradicional, visible en sm: y superior) */}
+                 
           <div className="bg-gray-800 shadow-xl rounded-lg overflow-x-auto hidden sm:block">
+                     
             <table className="min-w-full divide-y divide-gray-700">
+                         
               <thead className="bg-gray-700/50">
+                             
                 <tr>
+                                 
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
-                    Fecha Pedido
+                                        Fecha Pedido                
                   </th>
+                                 
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
-                    Proveedor
+                                        Proveedor                
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
-                    &nbsp;Estado
-                  </th>
+                                 
+                  {/* 🛑 AÑADIDO: Total Pedido (Entre Proveedor y Estado) */}   
+                             
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-300 uppercase">
-                    Completado
+                                        Total Pedido                
                   </th>
+                                 
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
+                                        &nbsp;&nbsp;&nbsp;Estado                
+                  </th>
+                                 
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-300 uppercase">
+                                        Completado                
+                  </th>
+                                 
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase">
-                    Acciones
+                                        Acciones                
                   </th>
+                               
                 </tr>
+                           
               </thead>
+                         
               <tbody className="bg-gray-800 divide-y divide-gray-700">
-                {purchaseOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-gray-700/50">
-                    {/* Columna Fecha Pedido: Agregamos align-middle */}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 align-middle">
-                      {order.orderDate}
-                    </td>
-                    {/* Columna Proveedor: Agregamos align-middle */}
-                    <td className="px-6 py-4 whitespace-nowrap text-left text-sm font-medium text-white">
-                      {order.supplierName}
-                    </td>
-                    {/* Columna Estado: Usamos flex para centrar verticalmente el chip */}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 align-middle">
-                      <div className="flex items-center h-full">
-                        <span
-                          className={`px-3 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            order.status === PurchaseOrderStatus.Completed ||
-                            order.status === PurchaseOrderStatus.Archived
-                              ? "bg-green-500/20 text-green-400"
-                              : "bg-yellow-500/20 text-yellow-400"
-                          }`}
-                        >
-                          {order.status}
-                        </span>
-                      </div>
-                    </td>
-                    {/* Columna Completado: Usamos flex para centrar vertical y horizontalmente */}
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm align-middle">
-                      <div className="flex items-center justify-center h-full">
-                        {order.status === PurchaseOrderStatus.Pending && (
-                          <button
-                            onClick={() => handleReceiveOrder(order)}
-                            className="px-1.5 py-0.5 bg-green-600/30 text-green-400 hover:bg-green-600 hover:text-white rounded-xl text-xs font-medium transition duration-300"
+                             
+                {purchaseOrders.map((order) => {
+                  // 🛑 LLAMADA A LA FUNCIÓN GLOBAL (CORREGIDO)
+                  const totalAmount = calculateOrderTotal(
+                    order,
+                    inventoryItems
+                  );
+
+                  return (
+                    <tr key={order.id} className="hover:bg-gray-700/50">
+                                         
+                      {/* Columna Fecha Pedido: Agregamos align-middle */}     
+                                   
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 align-middle">
+                                                {order.orderDate}               
+                           
+                      </td>
+                                         
+                      {/* Columna Proveedor: Agregamos align-middle */}         
+                               
+                      <td className="px-6 py-4 whitespace-nowrap text-left text-sm font-medium text-white">
+                                                {order.supplierName}           
+                               
+                      </td>
+                      {/* 🛑 NUEVA CELDA: TOTAL PEDIDO */}
+                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-yellow-400">
+                        {totalAmount > 0
+                          ? `${totalAmount.toFixed(2).replace(".", ",")} €`
+                          : "0,00 €"}
+                      </td>
+                                         
+                      {/* Columna Estado: Usamos flex para centrar verticalmente el chip */}
+                                         
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 align-middle text-center">
+                        {" "}
+                                             
+                        <div className="flex items-center h-full">
+                                                 
+                          <span
+                            className={`px-3 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              order.status === PurchaseOrderStatus.Completed ||
+                              order.status === PurchaseOrderStatus.Archived
+                                ? "bg-green-500/20 text-green-400"
+                                : "bg-yellow-500/20 text-yellow-400"
+                            }`}
                           >
-                            Recibir
+                                                        {order.status}         
+                                         
+                          </span>
+                                               
+                        </div>
+                                           
+                      </td>
+                                         
+                      {/* Columna Completado: Usamos flex para centrar vertical y horizontalmente */}
+                                         
+                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm align-middle">
+                                             
+                        <div className="flex items-center justify-center h-full">
+                                                 
+                          {order.status === PurchaseOrderStatus.Pending && (
+                            <button
+                              onClick={() => handleReceiveOrder(order)}
+                              className="px-1.5 py-0.5 bg-green-600/30 text-green-400 hover:bg-green-600 hover:text-white rounded-xl text-xs font-medium transition duration-300"
+                            >
+                                                            Recibir            
+                                           
+                            </button>
+                          )}
+                                                 
+                          {(order.status === PurchaseOrderStatus.Completed ||
+                            order.status === PurchaseOrderStatus.Archived) && (
+                            <span className="text-green-400 font-bold">OK</span>
+                          )}
+                                               
+                        </div>
+                                           
+                      </td>
+                                         
+                      {/* Columna Acciones: Usamos flex para centrar verticalmente */}
+                                         
+                      <td className="px-4 py-4 whitespace-nowrap text-right text-sm align-middle">
+                                             
+                        <div className="flex items-center justify-end h-full">
+                                                 
+                          <button
+                            onClick={() => openOrderModal(order)}
+                            className="text-indigo-400 mr-2 h-4 w-4"
+                          >
+                                                        <PencilIcon />         
+                                         
                           </button>
-                        )}
-                        {(order.status === PurchaseOrderStatus.Completed ||
-                          order.status === PurchaseOrderStatus.Archived) && (
-                          <span className="text-green-400 font-bold">OK</span>
-                        )}
-                      </div>
-                    </td>
-                    {/* Columna Acciones: Usamos flex para centrar verticalmente */}
-                    <td className="px-4 py-4 whitespace-nowrap text-right text-sm align-middle">
-                      <div className="flex items-center justify-end h-full">
-                        <button
-                          onClick={() => openOrderModal(order)}
-                          className="text-indigo-400 mr-2 h-4 w-4"
-                        >
-                          <PencilIcon />
-                        </button>
-                        <button
-                          onClick={() =>
-                            window.confirm(
-                              "¿Seguro que quieres eliminar este pedido?"
-                            ) && onDeletePurchaseOrder(order.id)
-                          }
-                          className="text-red-500 h-4 w-4"
-                        >
-                          <TrashIcon />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                                                 
+                          <button
+                            onClick={() =>
+                              window.confirm(
+                                "¿Seguro que quieres eliminar este pedido?"
+                              ) && onDeletePurchaseOrder(order.id)
+                            }
+                            className="text-red-500 h-4 w-4"
+                          >
+                                                        <TrashIcon />           
+                                       
+                          </button>
+                                               
+                        </div>
+                                           
+                      </td>
+                                     
+                    </tr>
+                  );
+                })}
+                                 
               </tbody>
+                       
             </table>
+                   
           </div>
-          {/* 🛑 FIN: Vista de ESCRITORIO */}
+                    {/* 🛑 FIN: Vista de ESCRITORIO */}       
           {/* 🛑 INICIO: Vista de MÓVIL (Estructura de Tarjetas/Cascada, visible solo en móvil) */}
+                 
           <div className="sm:hidden space-y-4">
+                     
             {purchaseOrders.map((order) => {
               const isCompleted =
                 order.status === PurchaseOrderStatus.Completed ||
                 order.status === PurchaseOrderStatus.Archived;
+              // 🛑 CALCULAR EL TOTAL EN MÓVIL
+              const totalAmount = calculateOrderTotal(order, inventoryItems);
 
               return (
                 <div
                   key={order.id}
                   className="bg-gray-800 shadow-xl rounded-lg p-4 border border-gray-700"
                 >
-                  {/* Fila 1: Proveedor y Estado */}
+                                    {/* Fila 1: Proveedor y Estado */}         
+                       
                   <div className="flex justify-between items-start border-b border-gray-700 pb-2 mb-2">
+                                     
                     <h4 className="text-lg font-bold text-white flex-1 truncate">
-                      {order.supplierName}
+                                            {order.supplierName}               
+                       
                     </h4>
+                                     
                     <span
                       className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                         isCompleted
@@ -2036,30 +2147,52 @@ const InventoryComponent: React.FC<InventoryProps> = ({
                           : "bg-yellow-500/20 text-yellow-400"
                       }`}
                     >
-                      {order.status}
+                                            {order.status}                 
                     </span>
+                                   
                   </div>
-
-                  {/* Fila 2: Detalles (Fecha y Opcional Fecha de Entrega) */}
+                                 
+                  {/* Fila 2: Detalles (Fecha y Opcional Fecha de Entrega) */} 
+                               
                   <div className="space-y-1 text-sm">
+                                     
                     <div className="flex justify-between">
+                                         
                       <span className="text-gray-400 font-medium">
-                        Fecha Pedido:
+                                                Fecha Pedido:                  
+                         
                       </span>
-                      <span className="text-white">{order.orderDate}</span>
+                                         
+                      <span className="text-white">{order.orderDate}</span>     
+                                 
                     </div>
-
-                    {/* Fila 3: Acciones */}
+                    {/* 🛑 NUEVA FILA: TOTAL PEDIDO (Móvil) */}
+                    <div className="flex justify-between pt-1">
+                      <span className="text-gray-400 font-medium">Total:</span>
+                      <span className="text-yellow-400 font-bold">
+                        {totalAmount > 0
+                          ? `${totalAmount.toFixed(2).replace(".", ",")} €`
+                          : "0,00 €"}
+                      </span>
+                    </div>
+                                        {/* Fila 3: Acciones */}               
+                     
                     <div className="pt-4 flex justify-between items-center border-t border-gray-700 mt-3">
-                      {/* Botones de Edición y Eliminación */}
+                                         
+                      {/* Botones de Edición y Eliminación */}                 
+                       
                       <div className="flex items-center space-x-3">
+                                             
                         <button
                           onClick={() => openOrderModal(order)}
                           className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
                         >
-                          <PencilIcon className="h-5 w-5" />
-                          <span className="text-sm">Editar</span>
+                                                 
+                          <PencilIcon className="h-5 w-5" />                   
+                                <span className="text-sm">Editar</span>         
+                                     
                         </button>
+                                             
                         <button
                           onClick={() =>
                             window.confirm(
@@ -2068,31 +2201,39 @@ const InventoryComponent: React.FC<InventoryProps> = ({
                           }
                           className="text-red-500 hover:text-red-400 flex items-center gap-1"
                         >
-                          <TrashIcon className="h-5 w-5" />
-                          <span className="text-sm">Eliminar</span>
+                                                 
+                          <TrashIcon className="h-5 w-5" />                     
+                              <span className="text-sm">Eliminar</span>         
+                                     
                         </button>
+                                           
                       </div>
-
-                      {/* Botón Completado / OK */}
+                                            {/* Botón Completado / OK */}       
+                                 
                       {order.status === PurchaseOrderStatus.Pending ? (
                         <button
                           onClick={() => handleReceiveOrder(order)}
                           className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-medium transition duration-300"
                         >
-                          Recibir
+                                                    Recibir                    
+                           
                         </button>
                       ) : (
                         <span className="text-green-400 font-bold text-lg">
-                          OK
+                                                    OK                      
                         </span>
                       )}
+                                       
                     </div>
+                                   
                   </div>
+                               
                 </div>
               );
             })}
+                   
           </div>
-          {/* 🛑 FIN: Vista de MÓVIL */}
+                    {/* 🛑 FIN: Vista de MÓVIL */}     
         </div>
       )}
       {activeTab === "analysis" && (
