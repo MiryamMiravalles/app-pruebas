@@ -6,7 +6,7 @@ import { Db } from "mongodb";
 const MONGO_URI = process.env.MONGO_URI;
 
 // Nombre de la base de datos (extraído de la URI o especificado por si la URI no lo tiene)
-const DB_NAME_DEFAULT = "inventory_app";
+const DB_NAME_DEFAULT = "inventary_app";
 
 // Caching de la conexión Mongoose y la base de datos nativa
 let cachedMongoose: Mongoose | null = null;
