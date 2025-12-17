@@ -69,15 +69,15 @@ const convertToCsv = (record: InventoryRecordDocument): string => {
   const isAnalysis = record.type === "analysis";
 
   let csv = "";
-  const separator = ";";
+  const separator = ";"; // 🛑 USAMOS EL ORDENAMIENTO REQUERIDO
 
-  // 🛑 USAMOS EL ORDENAMIENTO REQUERIDO
   const sortedItems = sortItems(record.items);
   let lastCategory = "";
 
   if (isAnalysis) {
-    // FILA DE ENCABEZADO (ANÁLISIS)
-    const headerRow = `Articulo${separator}P.U. s/IVA${separator}Stock Actual${separator}En Pedidos${separator}Stock Inicial Total${separator}Consumo\n`;
+    // === Lógica para Análisis (Consumo) - PRECIO EXCLUIDO ===
+    // 🛑 CORREGIDO: Eliminada la columna P.U. s/IVA de la cabecera
+    const headerRow = `Articulo${separator}Stock Actual${separator}En Pedidos${separator}Stock Inicial Total${separator}Consumo\n`;
     csv += headerRow;
 
     sortedItems.forEach((item) => {
@@ -102,19 +102,12 @@ const convertToCsv = (record: InventoryRecordDocument): string => {
       const consumption =
         item.consumption !== undefined
           ? Number(item.consumption).toFixed(2).replace(".", ",")
-          : "0,00";
+          : "0,00"; // 🛑 ELIMINADA la declaración de la variable 'price' que no se usa. // 🛑 CORREGIDO: Fila de Datos SIN la columna 'price'. // Antes: csv += `"${item.name}"${separator}${price}${separator}${currentStock}${separator}${pendingStock}${separator}${initialTotalStock}${separator}${consumption}\n`;
 
-      // Precio (asegurado por la corrección en models.ts)
-      let price =
-        item.pricePerUnitWithoutIVA !== undefined
-          ? Number(item.pricePerUnitWithoutIVA).toFixed(2).replace(".", ",")
-          : "0,00";
-
-      // Fila de Datos
-      csv += `"${item.name}"${separator}${price}${separator}${currentStock}${separator}${pendingStock}${separator}${initialTotalStock}${separator}${consumption}\n`;
+      csv += `"${item.name}"${separator}${currentStock}${separator}${pendingStock}${separator}${initialTotalStock}${separator}${consumption}\n`;
     });
   } else {
-    // === Lógica para Snapshot (Inventario) ===
+    // === Lógica para Snapshot (Inventario) - (Se mantiene con precio) ===
 
     // ORDEN FIJO DE UBICACIONES
     const REQUESTED_LOCATIONS = [
@@ -129,25 +122,21 @@ const convertToCsv = (record: InventoryRecordDocument): string => {
       "B4",
       "Ofice B4",
       "Almacén",
-    ];
+    ]; // Recoger todas las ubicaciones que tienen stock en el registro
 
-    // Recoger todas las ubicaciones que tienen stock en el registro
     const allLocations = new Set<string>();
     record.items.forEach((item) => {
       Object.keys(item.stockByLocationSnapshot || {}).forEach((loc) =>
         allLocations.add(loc)
       );
-    });
+    }); // Crear la lista de ubicaciones a mostrar, respetando el orden fijo
 
-    // Crear la lista de ubicaciones a mostrar, respetando el orden fijo
     const locations = REQUESTED_LOCATIONS.filter((loc) =>
       allLocations.has(loc)
-    );
+    ); // Encabezados para Snapshot (Inventario por Ubicación)
 
-    // Encabezados para Snapshot (Inventario por Ubicación)
     let header = "Articulo";
-    header += `${separator}P.U. s/IVA`;
-    // 🛑 CORRECCIÓN: AÑADIDO: Columna Valor Total en el encabezado
+    header += `${separator}P.U. s/IVA`; // 🛑 CORRECCIÓN: AÑADIDO: Columna Valor Total en el encabezado
     header += `${separator}VALOR TOTAL`;
     locations.forEach((loc) => {
       header += `${separator}${loc.toUpperCase()}`;
@@ -160,32 +149,26 @@ const convertToCsv = (record: InventoryRecordDocument): string => {
       if (item.category && item.category !== lastCategory) {
         csv += `\n"${item.category}"\n`;
         lastCategory = item.category;
-      }
+      } // CÁLCULO DEL STOCK TOTAL
 
-      // CÁLCULO DEL STOCK TOTAL
       const totalStock = Object.values(
         item.stockByLocationSnapshot || {}
-      ).reduce((sum: number, val: any) => sum + (Number(val) || 0), 0);
+      ).reduce((sum: number, val: any) => sum + (Number(val) || 0), 0); // Precio
 
-      // Precio (asegurado por la corrección en models.ts)
       const price =
         item.pricePerUnitWithoutIVA !== undefined
           ? Number(item.pricePerUnitWithoutIVA)
-          : 0;
+          : 0; // 🛑 CORRECCIÓN: CÁLCULO DEL VALOR TOTAL
 
-      // 🛑 CORRECCIÓN: CÁLCULO DEL VALOR TOTAL
       const totalValue = price * totalStock;
 
       let priceFormatted = Number(price).toFixed(2).replace(".", ",");
-      let totalValueFormatted = Number(totalValue).toFixed(2).replace(".", ",");
+      let totalValueFormatted = Number(totalValue).toFixed(2).replace(".", ","); // Fila de Datos del Artículo
 
-      // Fila de Datos del Artículo
-      let row = `"${item.name}"${separator}${priceFormatted}`;
+      let row = `"${item.name}"${separator}${priceFormatted}`; // 🛑 CORRECCIÓN: AÑADIDO: Valor Total
 
-      // 🛑 CORRECCIÓN: AÑADIDO: Valor Total
-      row += `${separator}${totalValueFormatted}`;
+      row += `${separator}${totalValueFormatted}`; // Iterar sobre la lista de ubicaciones FIJAS
 
-      // Iterar sobre la lista de ubicaciones FIJAS
       locations.forEach((loc) => {
         const rawStock = item.stockByLocationSnapshot?.[loc];
         const stock =
@@ -193,15 +176,13 @@ const convertToCsv = (record: InventoryRecordDocument): string => {
             ? Number(rawStock).toFixed(2).replace(".", ",")
             : "0,00";
         row += `${separator}${stock}`;
-      });
+      }); // Añadir el Total (stock) al final
 
-      // Añadir el Total (stock) al final
       row += `${separator}${Number(totalStock).toFixed(2).replace(".", ",")}\n`;
       csv += row;
     });
-  }
+  } // Añadir BOM (Byte Order Mark)
 
-  // Añadir BOM (Byte Order Mark)
   return "\ufeff" + csv;
 };
 
@@ -211,8 +192,7 @@ export const handler: Handler = async (event, context) => {
 
   const headers = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, Content-Disposition",
-    // 🛑 CORRECCIÓN: Permitir PUT para manejo robusto de upsert
+    "Access-Control-Allow-Headers": "Content-Type, Content-Disposition", // 🛑 CORRECCIÓN: Permitir PUT para manejo robusto de upsert
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   };
 
@@ -234,10 +214,8 @@ export const handler: Handler = async (event, context) => {
   }
 
   try {
-    const ObjectId = mongoose.Types.ObjectId;
+    const ObjectId = mongoose.Types.ObjectId; // Nota: El modelo es accesible globalmente si está en el archivo models.ts // Si no lo estuviera, habría que importarlo/definirlo aquí.
 
-    // Nota: El modelo es accesible globalmente si está en el archivo models.ts
-    // Si no lo estuviera, habría que importarlo/definirlo aquí.
     const collection: Collection<InventoryRecordDocument> =
       db.collection(COLLECTION_NAME);
 
@@ -245,8 +223,7 @@ export const handler: Handler = async (event, context) => {
       if (!record) return null;
       const _idString = ObjectId.isValid(record._id)
         ? record._id.toString()
-        : String(record._id);
-      // Usar un método de Mongoose para asegurar la virtualización
+        : String(record._id); // Usar un método de Mongoose para asegurar la virtualización
       const { _id, ...rest } = record;
       return { id: _idString, ...rest };
     };
@@ -313,9 +290,8 @@ export const handler: Handler = async (event, context) => {
         headers,
         body: JSON.stringify(formattedRecords),
       };
-    }
+    } // 🛑 CORRECCIÓN: Aceptar tanto POST (crear) como PUT (actualizar) para guardar el historial
 
-    // 🛑 CORRECCIÓN: Aceptar tanto POST (crear) como PUT (actualizar) para guardar el historial
     if (event.httpMethod === "POST" || event.httpMethod === "PUT") {
       const data = JSON.parse(event.body || "{}");
       const recordToSave: any = { ...data };
@@ -393,9 +369,8 @@ export const handler: Handler = async (event, context) => {
           body: JSON.stringify({ message: "All history records deleted" }),
         };
       }
-    }
+    } // Si el método no es ninguno de los anteriores
 
-    // Si el método no es ninguno de los anteriores
     return { statusCode: 405, headers, body: "Method Not Allowed" };
   } catch (error: any) {
     console.error("Error executing history function:", error);

@@ -286,6 +286,9 @@ const InventoryComponent: React.FC<InventoryProps> = ({
   const [currentInventoryItem, setCurrentInventoryItem] =
     useState<Partial<InventoryItem>>(emptyInventoryItem);
 
+  // 🛑 AÑADIDO: Estado temporal para el input de precio decimal
+  const [tempPriceString, setTempPriceString] = useState("");
+
   const [isOrderModalOpen, setOrderModalOpen] = useState(false);
   const [currentPurchaseOrder, setCurrentPurchaseOrder] = useState<
     PurchaseOrder | Omit<PurchaseOrder, "id">
@@ -467,16 +470,33 @@ const InventoryComponent: React.FC<InventoryProps> = ({
     });
   }, [inventoryItems, stockInOrders]);
 
+  // 🛑 CORRECCIÓN: Implementación de handlers para estado temporal y lógica de guardado
   const openInventoryModal = (item?: InventoryItem) => {
-    setCurrentInventoryItem(item || emptyInventoryItem);
+    const itemToEdit = item || emptyInventoryItem;
+    setCurrentInventoryItem(itemToEdit);
+
+    // 🛑 CORRECCIÓN CLAVE: Si el precio es 0, inicializar como cadena vacía ("")
+    const priceValue = itemToEdit.pricePerUnitWithoutIVA || 0;
+    setTempPriceString(
+      priceValue > 0.01 ? String(priceValue).replace(".", ",") : ""
+    );
+
     setInventoryModalOpen(true);
   };
+
   const closeInventoryModal = () => {
     setInventoryModalOpen(false);
     setCurrentInventoryItem(emptyInventoryItem);
+    // 🛑 LIMPIAR ESTADO TEMPORAL AL CERRAR
+    setTempPriceString("");
   };
+
   const handleSaveInventory = () => {
     const itemToSave: Partial<InventoryItem> = { ...currentInventoryItem };
+
+    // 🛑 USAR EL VALOR PARSEADO DEL ESTADO TEMPORAL
+    const finalPrice = parseDecimal(tempPriceString);
+    itemToSave.pricePerUnitWithoutIVA = finalPrice;
 
     if (!itemToSave.id) {
       const initialStock = INVENTORY_LOCATIONS.reduce(
@@ -492,6 +512,7 @@ const InventoryComponent: React.FC<InventoryProps> = ({
     } as InventoryItem);
     closeInventoryModal();
   };
+
   const handleInventoryChange = (
     field:
       | keyof Omit<InventoryItem, "id" | "stockByLocation">
@@ -500,6 +521,26 @@ const InventoryComponent: React.FC<InventoryProps> = ({
   ) => {
     setCurrentInventoryItem((prev) => ({ ...prev, [field]: value }));
   };
+
+  // 🛑 NUEVAS FUNCIONES PARA EL MANEJO DEL INPUT DE PRECIO DECIMAL
+  const handlePriceInputChange = (value: string) => {
+    // Validación para permitir solo números enteros o decimales con coma o punto (hasta 2 decimales)
+    if (value && !/^\d*([,.]\d{0,2})?$/.test(value)) {
+      return;
+    }
+    // Actualiza la CADENA DE TEXTO TEMPORAL (lo que el usuario ve)
+    setTempPriceString(value);
+  };
+
+  const handlePriceInputBlur = () => {
+    // En el BLUR, parsea el valor y actualiza el estado numérico real del artículo
+    const newPrice = parseDecimal(tempPriceString);
+    setCurrentInventoryItem((prev) => ({
+      ...prev,
+      pricePerUnitWithoutIVA: newPrice,
+    }));
+  };
+  // 🛑 FIN DE NUEVOS HANDLERS
 
   const handleStockInputChange = (
     itemId: string,
@@ -991,106 +1032,156 @@ const InventoryComponent: React.FC<InventoryProps> = ({
       if (consumedItems.length === 0) {
         return (
           <div className="text-center py-5 text-slate-500">
-            <p>No se registró consumo de artículos en esta categoría.</p>
+                       {" "}
+            <p>No se registró consumo de artículos en esta categoría.</p>       
+             {" "}
           </div>
         );
       }
 
       return (
         <div>
+                 
           <table className="min-w-full divide-y divide-gray-700">
+                 
             <thead className="bg-gray-700/50">
+                         
               <tr>
-                {/* Artículo (Header) - Keep size, reduce padding (px-1 -> px-0), increase text to sm */}
+                                {/* 🛑 Columna 1: Artículo */}       
                 <th className="px-0 py-1 text-left text-sm font-medium text-gray-300 uppercase min-w-[120px] whitespace-normal">
-                  Artículo
+                                    Artículo            
                 </th>
-                {/* AÑADIDO: Precio Unitario sin IVA (Header) */}
+                               {/* 🛑 Columna 2: STOCK ACTUAL */}             
                 <th className="px-0 py-1 text-center text-xs font-medium text-gray-300 uppercase min-w-[40px] whitespace-normal">
-                  P.U. s/IVA
+                                    STOCK ACTUAL          
                 </th>
-                {/* Pedidos (Header) - Reduce padding and min-w for compression */}
+                               
+                {/* 🛑 Columna 3: EN PEDIDOS (Anteriormente Pedidos) */}       
                 <th className="px-0 py-1 text-center text-xs font-medium text-gray-300 uppercase min-w-[40px] whitespace-normal">
-                  Pedidos
+                                    EN PEDIDOS          
                 </th>
-                {/* Stock Inicial (Header) - Reduce padding and min-w for compression */}
+                               
+                {/* 🛑 Columna 4: STOCK SEMANA ANTERIOR (Anteriormente Stock Inicial) */}
+                   
                 <th className="px-0 py-1 text-center text-xs font-medium text-gray-300 uppercase min-w-[40px] whitespace-normal">
-                  Stock Inicial
+                                    STOCK SEMANA ANTERIOR          
                 </th>
-                {/* Stock Final (Header) - Reduce padding and min-w for compression */}
+                               
+                {/* 🛑 Columna 5: STOCK INICIAL TOTAL (Anteriormente Stock Final) */}
+                       
                 <th className="px-0 py-1 text-center text-xs font-medium text-gray-300 uppercase min-w-[40px] whitespace-normal">
-                  Stock Final
+                                    STOCK INICIAL TOTAL          
                 </th>
-                {/* Consumo (Header) - Reduce padding and min-w for compression */}
+                               {/* 🛑 Columna 6: Consumo */}             
                 <th className="px-0 py-1 text-center text-xs font-medium text-gray-300 uppercase min-w-[45px] whitespace-normal">
-                  Consumo
+                                    Consumo          
                 </th>
+                     
               </tr>
+                   
             </thead>
+                 
             <tbody className="bg-gray-800 divide-y divide-gray-700">
+                       
               {consumedItems.map((item, itemIndex) => (
                 <tr key={item.itemId || itemIndex}>
-                  {/* Artículo (Data) - Increase to text-sm, reduce padding (px-1 -> px-0) */}
+                                    {/* Artículo (Data) */}           
                   <td className="px-0 py-1 whitespace-nowrap text-sm font-medium text-white min-w-[120px]">
-                    {item.name}
+                                        {item.name}               
                   </td>
-                  {/* AÑADIDO: Precio Unitario sin IVA (Data) */}
-                  <td className="px-0 py-1 whitespace-nowrap text-sm text-center text-slate-300 min-w-[40px]">
-                    {item.pricePerUnitWithoutIVA
-                      ? item.pricePerUnitWithoutIVA.toFixed(2).replace(".", ",")
-                      : "0,00"}
-                  </td>
-                  {/* Pedidos (Data) - Increase to text-sm, reduce padding (px-1 -> px-0) */}
-                  <td className="px-0 py-1 whitespace-nowrap text-sm text-center text-yellow-400 min-w-[32px]">
-                    {item.pendingStock !== undefined
-                      ? item.pendingStock.toFixed(1).replace(".", ",")
-                      : "0.0"}
-                  </td>
-                  {/* Stock Inicial (Data) - Increase to text-sm, reduce padding (px-1 -> px-0) */}
-                  <td className="px-0 py-1 whitespace-nowrap text-sm text-center text-blue-400 min-w-[40px]">
-                    {item.initialStock !== undefined
-                      ? item.initialStock.toFixed(1).replace(".", ",")
-                      : "-"}
-                  </td>
-                  {/* Stock Final (Data) - Increase to text-sm, reduce padding (px-1 -> px-0) */}
-                  <td className="px-0 py-1 whitespace-nowrap text-sm text-center text-yellow-400 min-w-[40px]">
-                    {item.endStock !== undefined
+                                   {/* 🛑 STOCK ACTUAL (Data) */}               
+                  <td className="px-0 py-1 whitespace-nowrap text-sm text-center text-gray-300 min-w-[40px]">
+                               {/* Muestra el stock actual (EndStock) */}       
+                             
+                    {item.endStock && item.endStock > 0.001
                       ? item.endStock.toFixed(1).replace(".", ",")
-                      : "-"}
+                      : "0,0"}
+                             
                   </td>
-                  {/* Consumo (Data) - Make red and significantly larger (text-lg), reduce padding (px-1 -> px-0) */}
+                  {/* 🛑 EN PEDIDOS (Data) */}             
+                  <td className="px-0 py-1 whitespace-nowrap text-sm text-center text-yellow-400 min-w-[40px]">
+                                 
+                    {item.pendingStock && item.pendingStock > 0.001
+                      ? item.pendingStock.toFixed(1).replace(".", ",")
+                      : "0,0"}
+                             
+                  </td>
+                                   {/* 🛑 STOCK SEMANA ANTERIOR (Data) */}     
+                     
+                  <td className="px-0 py-1 whitespace-nowrap text-sm text-center text-gray-300 min-w-[40px]">
+                             
+                    {/* Usamos EndStock del registro anterior (que es InitialStock en el cálculo) */}
+                           
+                    {item.initialStock && item.initialStock > 0.001
+                      ? (item.initialStock - (item.pendingStock || 0))
+                          .toFixed(1)
+                          .replace(".", ",")
+                      : "0,0"}
+                           
+                  </td>
+                                   {/* 🛑 STOCK INICIAL TOTAL (Data) */}       
+                     
+                  <td className="px-0 py-1 whitespace-nowrap text-sm text-center text-blue-400 font-bold min-w-[40px]">
+                                 
+                    {item.initialStock && item.initialStock > 0.001
+                      ? item.initialStock.toFixed(1).replace(".", ",")
+                      : "0,0"}
+                             
+                  </td>
+                             
                   <td
                     className={`px-0 py-1 whitespace-nowrap text-lg text-center font-bold min-w-[45px] ${
-                      item.consumption !== undefined && item.consumption > 0
+                      item.consumption && item.consumption > 0.001
                         ? "text-red-400"
                         : "text-green-400"
                     }`}
                   >
-                    {item.consumption !== undefined
+                               
+                    {item.consumption && item.consumption > 0.001
                       ? item.consumption.toFixed(1).replace(".", ",")
-                      : "-"}
+                      : "0,0"}
+                               
                   </td>
+                     
                 </tr>
               ))}
+                       
             </tbody>
+                 
           </table>
+               
         </div>
       );
     };
 
     // MODIFIED: Acepta ítems ya filtrados para la categoría
+    // MODIFIED: Acepta ítems ya filtrados para la categoría
     const renderSnapshotTable = (items: DetailedInventoryRecordItem[]) => {
+      // 🛑 DEFINICIÓN LOCAL DE HELPERS PARA OPERAR SOBRE InventoryRecordItem
+      const calculateSnapshotTotalStock = (
+        item: DetailedInventoryRecordItem
+      ): number => {
+        return Object.values(item.stockByLocationSnapshot || {}).reduce(
+          (sum, val) => sum + (Number(val) || 0),
+          0
+        );
+      };
+
+      const calculateSnapshotTotalValue = (
+        item: DetailedInventoryRecordItem
+      ): number => {
+        const totalStock = calculateSnapshotTotalStock(item);
+        // Usamos el precio almacenado en el registro del historial (pricePerUnitWithoutIVA)
+        return (Number(item.pricePerUnitWithoutIVA) || 0) * totalStock;
+      };
+      // 🛑 FIN DE DEFINICIÓN LOCAL
+
       const itemsWithTotals = items // Usar los ítems ya agrupados
-        .map((item) => {
-          const stockValues = Object.values(
-            item.stockByLocationSnapshot || {}
-          ) as number[];
-          const total = stockValues.reduce(
-            (sum, val) => sum + (Number(val) || 0),
-            0
-          );
-          return { ...item, calculatedTotal: total };
-        })
+        .map((item) => ({
+          ...item,
+          // 🛑 Uso la función de cálculo LOCAL definida arriba
+          calculatedTotal: calculateSnapshotTotalStock(item),
+        }))
         .filter((item) => item.calculatedTotal > 0.001);
 
       if (itemsWithTotals.length === 0) {
@@ -1101,98 +1192,142 @@ const InventoryComponent: React.FC<InventoryProps> = ({
         );
       }
 
-      // REDUCCIÓN MÁXIMA DE ANCHOS PARA SNAPSHOT
-      const MIN_COL_WIDTH = "min-w-[48px]";
+      // Definición de anchos de columna para Snapshot
       const ITEM_COL_WIDTH = "min-w-[120px]";
-      const PRICE_COL_WIDTH = "min-w-[48px]"; // NUEVO: Ancho para el precio
+      const PRICE_COL_WIDTH = "min-w-[80px] w-20";
+      const TOTAL_VALUE_WIDTH = "min-w-[96px] w-24";
+      const TOTAL_STOCK_WIDTH = "min-w-[80px] w-20";
 
       return (
         <div className="overflow-x-auto">
-          <table className="divide-y divide-gray-700 w-full">
+          {/* 🛑 table-fixed para controlar anchos */}
+          <table className="divide-y divide-gray-700 table-fixed min-w-full">
             <thead className="bg-gray-700/50">
               <tr>
-                {/* Artículo: px-0 py-1 */}
+                {/* ARTÍCULO */}
                 <th
-                  className={`px-0 py-1 text-left text-xs font-medium text-gray-300 uppercase ${ITEM_COL_WIDTH}`}
+                  className={`p-1 text-left text-xs font-medium text-gray-300 uppercase ${ITEM_COL_WIDTH} whitespace-nowrap overflow-hidden text-ellipsis`}
                 >
-                  Artículo
+                  ARTÍCULO
                 </th>
-                {/* AÑADIDO: Precio Unitario sin IVA (Header) */}
+                {/* P.U. S/IVA */}
                 <th
-                  className={`px-0 py-1 text-center text-xs font-medium text-gray-300 uppercase ${PRICE_COL_WIDTH}`}
+                  className={`p-1 text-center text-xs font-medium text-gray-300 uppercase ${PRICE_COL_WIDTH}`}
                 >
-                  P.U. s/IVA
+                  P.U. S/IVA
                 </th>
-                {/* Ubicaciones: min-w-[48px] y px-0 py-1 para eliminar espacio innecesario */}
+                {/* UBICACIONES */}
                 {INVENTORY_LOCATIONS.map((loc) => (
                   <th
                     key={loc}
-                    // Reducir padding de th a px-0 py-1
-                    className={`px-0 py-1 text-center text-xs font-medium text-gray-300 uppercase w-16 whitespace-nowrap overflow-hidden text-ellipsis`}
+                    className={`p-1 text-center text-xs font-medium text-gray-300 uppercase w-16 whitespace-nowrap overflow-hidden text-ellipsis`}
                     title={loc}
                   >
-                    {/* Mostrar el nombre completo */}
                     {loc.toUpperCase()}
                   </th>
                 ))}
+                {/* 🛑 VALOR TOTAL (Monetario) */}
                 <th
-                  // Total: min-w-[32px] y centrado
-                  className={`px-0 py-1 text-center text-xs font-medium text-gray-300 uppercase min-w-[32px] whitespace-nowrap`}
+                  className={`p-1 text-center text-xs font-medium text-gray-300 uppercase ${TOTAL_VALUE_WIDTH}`}
                 >
-                  Total
+                  VALOR TOTAL
+                </th>
+                {/* 🛑 TOTAL (Unidades) */}
+                <th
+                  className={`p-1 text-center text-xs font-medium text-gray-300 uppercase ${TOTAL_STOCK_WIDTH}`}
+                >
+                  TOTAL
                 </th>
               </tr>
             </thead>
             <tbody className="bg-gray-800 divide-y divide-gray-700">
               {itemsWithTotals.map((item, itemIndex) => {
-                const calculatedTotal = item.calculatedTotal || 0;
+                // 🛑 Uso las funciones de cálculo LOCALES
+                const calculatedTotal = item.calculatedTotal || 0; // Unidades Totales
+                const totalValue = calculateSnapshotTotalValue(item); // Valor Monetario Total
+
                 return (
                   <tr
                     key={item.itemId || itemIndex}
                     className="hover:bg-gray-700/50"
                   >
-                    {/* Artículo: px-0 py-1 */}
+                    {/* ARTÍCULO DATA */}
                     <td
-                      className={`px-0 py-1 whitespace-nowrap text-xs font-medium text-white ${ITEM_COL_WIDTH}`}
+                      className={`p-1 whitespace-nowrap text-sm font-medium text-white ${ITEM_COL_WIDTH}`}
                     >
                       {item.name}
                     </td>
-                    {/* AÑADIDO: Precio Unitario sin IVA (Data) */}
+                    {/* P.U. S/IVA DATA */}
                     <td
-                      className={`px-0 py-1 whitespace-nowrap text-xs text-center text-slate-300 ${PRICE_COL_WIDTH}`}
+                      className={`p-1 text-center whitespace-nowrap text-xs text-slate-300 ${PRICE_COL_WIDTH}`}
                     >
-                      {item.pricePerUnitWithoutIVA
+                      {item.pricePerUnitWithoutIVA &&
+                      item.pricePerUnitWithoutIVA > 0.01
                         ? item.pricePerUnitWithoutIVA
                             .toFixed(2)
-                            .replace(".", ",")
-                        : "0,00"}
+                            .replace(".", ",") + " €"
+                        : "0,00 €"}
                     </td>
+                    {/* UBICACIONES DATA (Solo lectura) */}
                     {INVENTORY_LOCATIONS.map((loc) => {
                       const stockValue =
                         item.stockByLocationSnapshot?.[loc] || 0;
                       return (
                         <td
                           key={loc}
-                          // Ubicaciones: px-0 py-1 y negrita/tamaño condicional
-                          className={`px-0 py-1 whitespace-nowrap text-center ${MIN_COL_WIDTH} ${
-                            stockValue > 0.001
-                              ? "text-sm font-bold text-green-400"
-                              : "text-xs text-slate-400"
-                          }`}
+                          className="p-1 whitespace-nowrap text-center w-16"
                         >
-                          {stockValue.toFixed(1).replace(".", ",")}
+                          {/* Stock por ubicación */}
+                          <div
+                            className={`
+                                                bg-slate-700 rounded-md p-1 w-10 text-center mx-auto 
+                                                ${
+                                                  stockValue > 0.001
+                                                    ? "text-green-400 font-bold text-sm"
+                                                    : "text-slate-400 text-sm"
+                                                }
+                                            `}
+                          >
+                            {stockValue > 0.001
+                              ? stockValue.toFixed(1).replace(".", ",")
+                              : "0"}
+                          </div>
                         </td>
                       );
                     })}
-                    {/* Total: px-0 py-1, texto-sm, y CENTRADO. min-w-[32px] */}
+
+                    {/* 🛑 VALOR TOTAL DATA (Monetario) */}
                     <td
-                      className={`px-0 py-1 whitespace-nowrap text-sm text-center font-bold min-w-[32px] ${
-                        calculatedTotal > 0.001
-                          ? "text-green-400"
-                          : "text-slate-400"
-                      }`}
+                      className={`p-1 text-center whitespace-nowrap text-sm font-bold ${TOTAL_VALUE_WIDTH}`}
                     >
-                      {calculatedTotal.toFixed(1).replace(".", ",")}
+                      <span
+                        className={
+                          totalValue > 0.01
+                            ? "text-yellow-400"
+                            : "text-slate-400"
+                        }
+                      >
+                        {totalValue > 0.01
+                          ? `${totalValue.toFixed(2).replace(".", ",")} €`
+                          : "0,00 €"}
+                      </span>
+                    </td>
+
+                    {/* 🛑 TOTAL DATA (Unidades) */}
+                    <td
+                      className={`p-1 text-center whitespace-nowrap text-lg font-bold ${TOTAL_STOCK_WIDTH}`}
+                    >
+                      <span
+                        className={
+                          calculatedTotal > 0.001
+                            ? "text-green-400"
+                            : "text-slate-400"
+                        }
+                      >
+                        {calculatedTotal > 0.001
+                          ? calculatedTotal.toFixed(1).replace(".", ",")
+                          : "0,0"}
+                      </span>
                     </td>
                   </tr>
                 );
@@ -1202,7 +1337,6 @@ const InventoryComponent: React.FC<InventoryProps> = ({
         </div>
       );
     };
-
     return (
       <Modal
         title={`Detalle: ${viewingRecord.label}`}
@@ -1239,20 +1373,36 @@ const InventoryComponent: React.FC<InventoryProps> = ({
 
   const renderInventoryForm = () => (
     <div className="space-y-4">
-      <input
-        type="text"
-        placeholder="Precio Unitario sin IVA (Ej: 12,50)"
-        value={String(
-          currentInventoryItem.pricePerUnitWithoutIVA || ""
-        ).replace(".", ",")}
-        onChange={(e) =>
-          handleInventoryChange(
-            "pricePerUnitWithoutIVA",
-            parseDecimal(e.target.value)
-          )
-        }
-        className="bg-gray-700 text-white rounded p-2 w-full"
-      />
+      {/* 🛑 CORRECCIÓN: Mostrar campo de nombre solo si es artículo nuevo */}
+      {!currentInventoryItem.id && (
+        <input
+          type="text"
+          placeholder="Nombre del Artículo"
+          value={currentInventoryItem.name || ""}
+          onChange={(e) => handleInventoryChange("name", e.target.value)}
+          className="bg-gray-700 text-white rounded p-2 w-full"
+          required
+        />
+      )}
+
+      {/* 🛑 CORRECCIÓN: Campo de precio con manejo de estado temporal para decimales */}
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="Precio Unitario sin IVA (Ej: 12,50)"
+          // 🛑 Usar el estado temporal para el valor
+          value={tempPriceString}
+          // 🛑 Usar la nueva función para el manejo de la cadena
+          onChange={(e) => handlePriceInputChange(e.target.value)}
+          // 🛑 Aplicar el valor numérico al estado real en blur
+          onBlur={handlePriceInputBlur}
+          className="bg-gray-700 text-white rounded p-2 w-full pr-8"
+        />
+        <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 pointer-events-none">
+          €
+        </span>
+      </div>
+
       <select
         value={currentInventoryItem.category || ""}
         onChange={(e) => handleInventoryChange("category", e.target.value)}
@@ -1624,115 +1774,131 @@ const InventoryComponent: React.FC<InventoryProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-700/50">
-                        {items.map((item) => (
-                          <tr key={item.id} className="hover:bg-gray-700/50">
-                            {/* 🛑 ARTÍCULO DATA (w-40 min-w:[150px]) */}
-                            <td className="p-1 whitespace-nowrap overflow-hidden text-ellipsis text-sm font-medium text-white w-40 min-w-[150px] max-w-[220px]">
-                              {item.name}
-                            </td>
+                        {items.map((item) => {
+                          const totalStock = calculateTotalStock(item);
+                          const totalValue = calculateTotalValue(item);
 
-                            {/* 🛑 AÑADIDO: P.U. s/IVA DATA */}
-                            <td className="p-1 text-center whitespace-nowrap text-xs text-slate-300 w-20 min-w-[80px]">
-                              {item.pricePerUnitWithoutIVA
-                                ? item.pricePerUnitWithoutIVA
-                                    .toFixed(2)
-                                    .replace(".", ",") + " €"
-                                : "0,00 €"}
-                            </td>
-
-                            {/* Renderizar campos de input solo para la columna seleccionada o todas */}
-                            {(selectedLocationColumn === "all"
-                              ? INVENTORY_LOCATIONS
-                              : [selectedLocationColumn]
-                            ).map((loc) => (
-                              <td
-                                key={loc}
-                                // 🛑 text-center para el input, y ancho fijo (w-16)
-                                className={`p-1 whitespace-nowrap text-center w-16`}
-                              >
-                                <input
-                                  type="text"
-                                  value={
-                                    tempStockValues[`${item.id}-${loc}`] !==
-                                    undefined
-                                      ? tempStockValues[`${item.id}-${loc}`]
-                                      : item.stockByLocation?.[loc]
-                                      ? String(
-                                          item.stockByLocation[loc]
-                                        ).replace(".", ",")
-                                      : ""
-                                  }
-                                  onChange={(e) =>
-                                    handleStockInputChange(
-                                      item.id,
-                                      loc,
-                                      e.target.value
-                                    )
-                                  }
-                                  onBlur={() => handleStockInputBlur(item, loc)}
-                                  // 🛑 ESTILO DE BOTÓN Y CENTRADO: p-1 para el padding, w-10 para el ancho, rounded-md
-                                  className="bg-slate-700 text-white rounded-md p-1 w-10 text-center text-sm border border-slate-700 inline-block"
-                                  placeholder="0"
-                                />
+                          return (
+                            <tr key={item.id} className="hover:bg-gray-700/50">
+                              {/* 🛑 ARTÍCULO DATA (w-40 min-w:[150px]) */}
+                              <td className="p-1 whitespace-nowrap overflow-hidden text-ellipsis text-sm font-medium text-white w-40 min-w-[150px] max-w-[220px]">
+                                {item.name}
                               </td>
-                            ))}
 
-                            {/* 🛑 NUEVA COLUMNA: VALOR TOTAL */}
-                            <td className="p-1 text-center whitespace-nowrap text-sm font-bold w-24">
-                              <span
-                                className={
-                                  calculateTotalValue(item) > 0.01
-                                    ? "text-yellow-400"
-                                    : "text-slate-400"
-                                }
-                              >
-                                {calculateTotalValue(item)
-                                  .toFixed(2)
-                                  .replace(".", ",")}{" "}
-                                €
-                              </span>
-                            </td>
+                              {/* 🛑 AÑADIDO: P.U. s/IVA DATA */}
+                              <td className="p-1 text-center whitespace-nowrap text-xs text-slate-300 w-20 min-w-[80px]">
+                                {/* 🛑 CORRECCIÓN: Si el precio es <= 0.01, muestra solo "-" */}
+                                {item.pricePerUnitWithoutIVA &&
+                                item.pricePerUnitWithoutIVA > 0.01
+                                  ? item.pricePerUnitWithoutIVA
+                                      .toFixed(2)
+                                      .replace(".", ",") + " €"
+                                  : "0,00 €"}
+                              </td>
 
-                            {/* 🛑 MODIFICACIÓN: Columna TOTAL */}
-                            <td className="p-1 text-center whitespace-nowrap text-lg font-bold w-20">
-                              <span
-                                className={
-                                  calculateTotalStock(item) > 0.001
-                                    ? "text-green-400"
-                                    : "text-slate-400"
-                                }
-                              >
-                                {calculateTotalStock(item)
-                                  .toFixed(1)
-                                  .replace(".", ",")}
-                              </span>
-                            </td>
-
-                            {/* Ancho fijo para acciones y usar justify-end */}
-                            <td className="p-1 whitespace-nowrap text-right text-sm w-14">
-                              <div className="flex justify-end items-center gap-1">
-                                <button
-                                  onClick={() => openInventoryModal(item)}
-                                  className="text-indigo-400"
-                                  title="Editar Artículo"
+                              {/* Renderizar campos de input solo para la columna seleccionada o todas */}
+                              {(selectedLocationColumn === "all"
+                                ? INVENTORY_LOCATIONS
+                                : [selectedLocationColumn]
+                              ).map((loc) => (
+                                <td
+                                  key={loc}
+                                  // 🛑 text-center para el input, y ancho fijo (w-16)
+                                  className={`p-1 whitespace-nowrap text-center w-16`}
                                 >
-                                  <PencilIcon />
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    window.confirm(
-                                      "¿Seguro que quieres eliminar este artículo?"
-                                    ) && onDeleteInventoryItem(item.id)
+                                  <input
+                                    type="text"
+                                    value={
+                                      tempStockValues[`${item.id}-${loc}`] !==
+                                      undefined
+                                        ? tempStockValues[`${item.id}-${loc}`]
+                                        : // 🛑 CORRECCIÓN: Si el stock es 0, el valor es "" (cadena vacía)
+                                        item.stockByLocation?.[loc] === 0
+                                        ? ""
+                                        : item.stockByLocation?.[loc] !==
+                                          undefined
+                                        ? String(
+                                            item.stockByLocation[loc]
+                                          ).replace(".", ",")
+                                        : ""
+                                    }
+                                    onChange={(e) =>
+                                      handleStockInputChange(
+                                        item.id,
+                                        loc,
+                                        e.target.value
+                                      )
+                                    }
+                                    onBlur={() =>
+                                      handleStockInputBlur(item, loc)
+                                    }
+                                    // 🛑 ESTILO DE BOTÓN Y CENTRADO: p-1 para el padding, w-10 para el ancho, rounded-md
+                                    className="bg-slate-700 text-white rounded-md p-1 w-10 text-center text-sm border border-slate-700 inline-block"
+                                    placeholder="0"
+                                  />
+                                </td>
+                              ))}
+
+                              {/* 🛑 NUEVA COLUMNA: VALOR TOTAL */}
+                              <td className="p-1 text-center whitespace-nowrap text-sm font-bold w-24">
+                                <span
+                                  className={
+                                    totalValue > 0.01
+                                      ? "text-yellow-400"
+                                      : "text-slate-400"
                                   }
-                                  className="text-red-500"
-                                  title="Eliminar Artículo"
                                 >
-                                  <TrashIcon />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                                  {/* 🛑 CORRECCIÓN: No mostrar "0,00 €" si el valor es 0 */}
+                                  {totalValue > 0.01
+                                    ? `${totalValue
+                                        .toFixed(2)
+                                        .replace(".", ",")} €`
+                                    : "0,00 €"}
+                                </span>
+                              </td>
+
+                              {/* 🛑 MODIFICACIÓN: Columna TOTAL */}
+                              <td className="p-1 text-center whitespace-nowrap text-lg font-bold w-20">
+                                <span
+                                  className={
+                                    totalStock > 0.001
+                                      ? "text-green-400"
+                                      : "text-slate-400"
+                                  }
+                                >
+                                  {/* 🛑 CORRECCIÓN: No mostrar "0,0" si el stock es 0 */}
+                                  {totalStock > 0.001
+                                    ? totalStock.toFixed(1).replace(".", ",")
+                                    : "0,0"}
+                                </span>
+                              </td>
+
+                              {/* Ancho fijo para acciones y usar justify-end */}
+                              <td className="p-1 whitespace-nowrap text-right text-sm w-14">
+                                <div className="flex justify-end items-center gap-1">
+                                  <button
+                                    onClick={() => openInventoryModal(item)}
+                                    className="text-indigo-400"
+                                    title="Editar Artículo"
+                                  >
+                                    <PencilIcon />
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      window.confirm(
+                                        "¿Seguro que quieres eliminar este artículo?"
+                                      ) && onDeleteInventoryItem(item.id)
+                                    }
+                                    className="text-red-500"
+                                    title="Eliminar Artículo"
+                                  >
+                                    <TrashIcon />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
