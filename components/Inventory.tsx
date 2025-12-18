@@ -1026,29 +1026,56 @@ const InventoryComponent: React.FC<InventoryProps> = ({
       year: "numeric",
     });
 
-    const recordItems: InventoryRecordItem[] = inventoryItems.map((item) => {
-      const totalStock = calculateTotalStock(item);
-      const pendingStock = stockInOrders[item.id] || 0;
-      // Identificamos el producto de cajas vacías
-      const isCajasVacias = item.name.toLowerCase().includes("cajas vacias");
-      const savedBoxDetails = localStorage.getItem("boxCounts_persistence");
-      const boxDetails = savedBoxDetails ? JSON.parse(savedBoxDetails) : null;
+    // 1. Obtener datos de la calculadora
+    const savedBoxDetails = localStorage.getItem("boxCounts_persistence");
+    const boxCounts = savedBoxDetails ? JSON.parse(savedBoxDetails) : null;
 
-      return {
+    // 2. Mapear artículos normales
+    const recordItems: InventoryRecordItem[] = inventoryItems
+      .filter((item) => !item.name.toLowerCase().includes("cajas vacias")) // Quitamos el ítem genérico
+      .map((item) => ({
         itemId: item.id,
         name: item.name,
         category: item.category,
-        currentStock: totalStock,
-        pendingStock: pendingStock,
-        initialStock: totalStock,
-        endStock: totalStock,
+        currentStock: calculateTotalStock(item),
+        pendingStock: stockInOrders[item.id] || 0,
+        initialStock: calculateTotalStock(item),
+        endStock: calculateTotalStock(item),
         consumption: 0,
         stockByLocationSnapshot: item.stockByLocation || {},
         pricePerUnitWithoutIVA: item.pricePerUnitWithoutIVA,
-        // Solo guardamos el desglose detallado si es el ítem de cajas vacías
-        details: isCajasVacias ? boxDetails : undefined,
+      }));
+
+    // 3. 🛑 TRUCO PARA EL EXCEL: Añadir marcas de cajas como artículos individuales
+    if (boxCounts) {
+      const multipliers: Record<string, number> = {
+        schweppes: 28,
+        cocaCola: 24,
+        cocaColaZero: 24,
+        pepsi: 24,
+        ambar: 24,
+        moritz: 24,
       };
-    });
+
+      Object.entries(boxCounts).forEach(([brand, qty]) => {
+        const cantidad = Number(qty);
+        if (cantidad > 0) {
+          const m = multipliers[brand] || 24;
+          recordItems.push({
+            itemId: `box-${brand}`,
+            name: `CAJAS ${brand.toUpperCase()} (${cantidad} cxs x ${m})`, // Esto saldrá en la columna Artículo
+            category: "📦 Embalajes",
+            currentStock: cantidad * m, // Esto saldrá en la columna Cantidad
+            pendingStock: 0,
+            initialStock: cantidad * m,
+            endStock: cantidad * m,
+            consumption: 0,
+            stockByLocationSnapshot: { Almacén: cantidad * m },
+            pricePerUnitWithoutIVA: 0,
+          });
+        }
+      });
+    }
 
     const newRecord: InventoryRecord = {
       id: crypto.randomUUID(),
@@ -1059,7 +1086,9 @@ const InventoryComponent: React.FC<InventoryProps> = ({
     };
 
     onSaveInventoryRecord(newRecord);
-    alert(`Inventario (${formattedDate}) guardado con desglose detallado.`);
+    alert(
+      `Inventario guardado. Ahora el Excel tendrá una fila por cada marca de caja con su stock total.`
+    );
   };
   // --- Guardar Análisis de Consumo (Pestaña Análisis) ---
   const handleSaveCurrentInventory = async () => {
@@ -1078,7 +1107,7 @@ const InventoryComponent: React.FC<InventoryProps> = ({
         category: item.category,
         currentStock: totalStock,
         consumption: 0,
-        details: item.details, // 🛑 AÑADE ESTA LÍNEA
+        details: item.details,
         stockByLocationSnapshot: item.stockByLocation || {},
         pricePerUnitWithoutIVA: item.pricePerUnitWithoutIVA,
       };
