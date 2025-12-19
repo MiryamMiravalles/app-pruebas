@@ -1590,6 +1590,7 @@ const App: React.FC = () => {
     { id: "orders", label: "Pedidos" },
     { id: "analysis", label: "Análisis" },
     { id: "history", label: "Historial" },
+    { id: "stats", label: "Gráficos" },
   ];
 
   const uniqueSuppliers = useMemo(() => {

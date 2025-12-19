@@ -19,7 +19,18 @@ import {
   ExportIcon,
 } from "./icons";
 import { INVENTORY_LOCATIONS } from "../constants";
-
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+  PieChart,
+  Pie,
+} from "recharts";
 interface InventoryProps {
   inventoryItems: InventoryItem[];
   purchaseOrders: PurchaseOrder[];
@@ -1162,6 +1173,198 @@ const InventoryComponent: React.FC<InventoryProps> = ({
 
   const openRecordDetailModal = (record: InventoryRecord) => {
     setViewingRecord(record);
+  };
+
+  const renderStats = () => {
+    // 1. Procesamos los datos por CATEGORÍA
+    const categoryData = analysisGroupedItems
+      .filter((group) => !group.category.toLowerCase().includes("embalajes"))
+      .map(({ category, items }) => {
+        const gastoTotal = items.reduce((acc, item) => {
+          const consumption =
+            (initialStockMap.get(item.id) || 0) +
+            (stockInOrders[item.id] || 0) -
+            calculateTotalStock(item);
+          return (
+            acc +
+            (consumption > 0
+              ? consumption * (item.pricePerUnitWithoutIVA || 0)
+              : 0)
+          );
+        }, 0);
+        const cleanName = category.split(" ").slice(1).join(" ") || category;
+        return { name: cleanName, gasto: parseFloat(gastoTotal.toFixed(2)) };
+      })
+      .filter((d) => d.gasto > 0)
+      .sort((a, b) => b.gasto - a.gasto);
+
+    // 2. Procesamos los datos por PRODUCTO (Top 10)
+    const productData = inventoryItems
+      .filter((item) => !item.category.toLowerCase().includes("embalajes"))
+      .map((item) => {
+        const consumption =
+          (initialStockMap.get(item.id) || 0) +
+          (stockInOrders[item.id] || 0) -
+          calculateTotalStock(item);
+        const gasto =
+          consumption > 0
+            ? consumption * (item.pricePerUnitWithoutIVA || 0)
+            : 0;
+        return { name: item.name, gasto: parseFloat(gasto.toFixed(2)) };
+      })
+      .filter((d) => d.gasto > 0.5) // Solo productos con gasto relevante
+      .sort((a, b) => b.gasto - a.gasto)
+      .slice(0, 10); // Tomamos los 10 primeros
+
+    const COLORS = [
+      "#5c31c0ff",
+      "#10b981",
+      "#f59e0b",
+      "#ef4444",
+      "#3b82f6",
+      "#ec4899",
+    ];
+
+    return (
+      <div className="space-y-8 animate-fade-in pb-24">
+        {/* FILA 1: RESUMEN POR CATEGORÍA */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+            <h3 className="text-white font-bold mb-6 flex items-center gap-2">
+              <span className="p-2 bg-violet-500/20 rounded-lg text-violet-400">
+                📊
+              </span>
+              Gasto por Categoría
+            </h3>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={categoryData}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="#334155"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="name"
+                    stroke="#94a3b8"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    stroke="#94a3b8"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) => `${v}€`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#1e293b",
+                      border: "none",
+                      borderRadius: "12px",
+                    }}
+                  />
+                  <Bar dataKey="gasto" radius={[4, 4, 0, 0]}>
+                    {categoryData.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+            <h3 className="text-white font-bold mb-6 flex items-center gap-2">
+              <span className="p-2 bg-emerald-500/20 rounded-lg text-emerald-400">
+                💰
+              </span>
+              Distribución del Gasto (%)
+            </h3>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={categoryData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={85}
+                    paddingAngle={5}
+                    dataKey="gasto"
+                  >
+                    {categoryData.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#1e293b",
+                      border: "none",
+                      borderRadius: "12px",
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+
+        {/* FILA 2: TOP PRODUCTOS (NUEVO) */}
+        <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+          <h3 className="text-white font-bold mb-6 flex items-center gap-2">
+            <span className="p-2 bg-amber-500/20 rounded-lg text-amber-400">
+              🏆
+            </span>
+            Top 10 Productos con Mayor Gasto
+          </h3>
+          <div className="h-[400px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={productData}
+                layout="vertical"
+                margin={{ left: 40, right: 30 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#334155"
+                  horizontal={true}
+                  vertical={false}
+                />
+                <XAxis
+                  type="number"
+                  stroke="#94a3b8"
+                  fontSize={11}
+                  tickFormatter={(v) => `${v}€`}
+                />
+                <YAxis
+                  dataKey="name"
+                  type="category"
+                  stroke="#fff"
+                  fontSize={11}
+                  width={120}
+                />
+                <Tooltip
+                  cursor={{ fill: "#334155", opacity: 0.4 }}
+                  contentStyle={{
+                    backgroundColor: "#1e293b",
+                    border: "none",
+                    borderRadius: "12px",
+                  }}
+                  formatter={(v: number) => [`${v} €`, "Gasto Total"]}
+                />
+                <Bar dataKey="gasto" radius={[0, 4, 4, 0]} barSize={20}>
+                  {productData.map((_, i) => (
+                    <Cell key={i} fill={i < 3 ? "#fbbf24" : "#6366f1"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const renderInventoryRecordDetailModal = () => {
@@ -2362,10 +2565,9 @@ const InventoryComponent: React.FC<InventoryProps> = ({
                   <div className="flex justify-between items-start border-b border-gray-700 pb-2 mb-2">
                                      
                     <h4 className="text-lg font-bold text-white flex-1 truncate">
-                                            {order.supplierName}               
-                       
-                    </h4>
-                                     
+                                {order.supplierName}               
+                    </h4>{" "}
+                             
                     <span
                       className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                         isCompleted
@@ -2373,24 +2575,23 @@ const InventoryComponent: React.FC<InventoryProps> = ({
                           : "bg-yellow-500/20 text-yellow-400"
                       }`}
                     >
-                                            {order.status}                 
+                      {order.status}                 
                     </span>
-                                   
-                  </div>
-                                 
+                             
+                  </div>{" "}
+                           
                   {/* Fila 2: Detalles (Fecha y Opcional Fecha de Entrega) */} 
                                
                   <div className="space-y-1 text-sm">
-                                     
+                                   
                     <div className="flex justify-between">
+                      {" "}
                                          
                       <span className="text-gray-400 font-medium">
-                                                Fecha Pedido:                  
-                         
+                                          Fecha Pedido:                    
                       </span>
-                                         
+                                   
                       <span className="text-white">{order.orderDate}</span>     
-                                 
                     </div>
                     {/* 🛑 NUEVA FILA: TOTAL PEDIDO (Móvil) */}
                     <div className="flex justify-between pt-1">
@@ -2401,22 +2602,20 @@ const InventoryComponent: React.FC<InventoryProps> = ({
                           : "0,00 €"}
                       </span>
                     </div>
-                                        {/* Fila 3: Acciones */}               
-                     
+                    {/* Fila 3: Acciones */}               
                     <div className="pt-4 flex justify-between items-center border-t border-gray-700 mt-3">
-                                         
                       {/* Botones de Edición y Eliminación */}                 
-                       
                       <div className="flex items-center space-x-3">
-                                             
+                        {" "}
+                                           
                         <button
                           onClick={() => openOrderModal(order)}
                           className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
                         >
                                                  
                           <PencilIcon className="h-5 w-5" />                   
-                                <span className="text-sm">Editar</span>         
-                                     
+                                <span className="text-sm">Editar</span>       
+                                      
                         </button>
                                              
                         <button
@@ -2429,39 +2628,36 @@ const InventoryComponent: React.FC<InventoryProps> = ({
                         >
                                                  
                           <TrashIcon className="h-5 w-5" />                     
-                              <span className="text-sm">Eliminar</span>         
-                                     
-                        </button>
-                                           
+                              <span className="text-sm">Eliminar</span>       
+                            
+                        </button>{" "}
+                                   
                       </div>
-                                            {/* Botón Completado / OK */}       
-                                 
                       {order.status === PurchaseOrderStatus.Pending ? (
                         <button
                           onClick={() => handleReceiveOrder(order)}
                           className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-medium transition duration-300"
                         >
-                                                    Recibir                    
-                           
+                          Recibir                    
                         </button>
                       ) : (
                         <span className="text-green-400 font-bold text-lg">
-                                                    OK                      
+                          {" "}
+                          OK                      
                         </span>
                       )}
-                                       
                     </div>
-                                   
-                  </div>
+                  </div>{" "}
                                
                 </div>
               );
             })}
-                   
-          </div>
-                    {/* 🛑 FIN: Vista de MÓVIL */}     
+               
+          </div>{" "}
+             
         </div>
       )}
+
       {activeTab === "analysis" && (
         <div className="bg-gray-800 shadow-xl rounded-lg overflow-x-auto p-4">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
@@ -2598,7 +2794,7 @@ const InventoryComponent: React.FC<InventoryProps> = ({
         </div>
       )}
 
-      {/* 🛑 INICIO: PESTAÑA HISTORIAL RESTAURADA Y MODIFICADA LA LLAMADA */}
+      {/* 🛑 INICIO: PESTAÑA HISTORIAL */}
       {activeTab === "history" && (
         <div className="bg-gray-800 shadow-xl rounded-lg p-6">
           <div className="flex justify-between items-center mb-4">
@@ -2610,7 +2806,6 @@ const InventoryComponent: React.FC<InventoryProps> = ({
               <TrashIcon /> Borrar Historial
             </button>
           </div>
-          {/* ELIMINADO WeeklyConsumptionAnalysis de aquí */}
           <h3 className="text-l font-bold text-white mb-3 mt-8 border-t border-gray-700 pt-4">
             Registros Anteriores
           </h3>
@@ -2661,31 +2856,34 @@ const InventoryComponent: React.FC<InventoryProps> = ({
           )}
         </div>
       )}
-      {/* 🛑 FIN: PESTAÑA HISTORIAL RESTAURADA */}
+      {/* 📊 PESTAÑA DE ESTADÍSTICAS (RECHARTS) */}
+      {activeTab === "stats" && renderStats()}
 
+      {/* --- MODALES --- */}
       {isInventoryModalOpen && (
         <Modal
           title={currentInventoryItem.id ? "Editar Artículo" : "Nuevo Artículo"}
-          onClose={closeInventoryModal}
+          onClose={() => setInventoryModalOpen(false)}
           onSave={handleSaveInventory}
         >
           {renderInventoryForm()}
         </Modal>
       )}
+
       {isOrderModalOpen && (
         <Modal
           title={
             "id" in currentPurchaseOrder ? "Editar Pedido" : "Nuevo Pedido"
           }
-          onClose={closeOrderModal}
+          onClose={() => setOrderModalOpen(false)}
           hideSaveButton={true}
         >
           {renderOrderForm()}
         </Modal>
       )}
+
       {viewingRecord && renderInventoryRecordDetailModal()}
     </div>
   );
 };
-
 export default InventoryComponent;

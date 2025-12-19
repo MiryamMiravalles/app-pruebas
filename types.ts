@@ -1,4 +1,4 @@
-export type View = "inventory" | "orders" | "analysis" | "history";
+export type View = "inventory" | "orders" | "analysis" | "history" | "stats";
 
 export interface InventoryItem {
   id: string;
