@@ -462,11 +462,11 @@ const InventoryComponent: React.FC<InventoryProps> = ({
   onBulkUpdateInventoryItems,
   onSaveInventoryRecord,
   onDeleteAllInventoryRecords,
-  onDeleteInventoryRecord, // RECIBIDO
-  onDownloadHistoryRecord, // RECIBIDO
+  onDeleteInventoryRecord,
+  onDownloadHistoryRecord,
   formatUTCToLocal,
   handleResetInventoryStocks,
-  activeTab, // Propiedad activa de App.tsx
+  activeTab,
 }) => {
   const [isInventoryModalOpen, setInventoryModalOpen] = useState(false);
   const [currentInventoryItem, setCurrentInventoryItem] =
@@ -517,8 +517,6 @@ const InventoryComponent: React.FC<InventoryProps> = ({
     return (Number(item.pricePerUnitWithoutIVA) || 0) * totalStock;
   };
 
-  // 🛑 [INICIO DE FRAGMENTO 1 CORREGIDO]
-
   // Función para calcular el valor total de un pedido
   const calculateOrderTotal = (
     order: PurchaseOrder,
@@ -528,17 +526,13 @@ const InventoryComponent: React.FC<InventoryProps> = ({
       const itemDetail = inventoryItems.find(
         (i) => i.id === item.inventoryItemId
       );
-      // Usamos el precio del inventario, ya que el precio en OrderItem no se mantiene actualizado en este flujo.
       const price = itemDetail?.pricePerUnitWithoutIVA || 0;
       return total + item.quantity * price;
     }, 0);
   };
-  // 🛑 [FIN DE FRAGMENTO 1 CORREGIDO]
 
   const validInventoryHistory = useMemo(() => {
     if (!Array.isArray(inventoryHistory)) return [];
-    // ... el resto de tu useMemo
-
     return inventoryHistory.sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     ) as InventoryRecord[];
@@ -1171,16 +1165,18 @@ const InventoryComponent: React.FC<InventoryProps> = ({
   };
 
   const renderInventoryRecordDetailModal = () => {
-    if (!viewingRecord || !Array.isArray(viewingRecord.items)) return null;
+    if (!viewingRecord || !viewingRecord.items) return null;
 
     const isAnalysis = viewingRecord.type === "analysis";
-    const recordItems = viewingRecord.items as InventoryRecordItem[];
 
-    // NEW LOGIC: Type, Mapping, Filtering, Grouping, Sorting
+    const recordItems =
+      (viewingRecord.items as any as InventoryRecordItem[]) || [];
+
     type DetailedInventoryRecordItem = InventoryRecordItem & {
       category: string;
     };
 
+    // Ahora recordItems es reconocido como un Array, el .map funcionará:
     const itemsWithCategory: DetailedInventoryRecordItem[] = recordItems.map(
       (recordItem) => {
         const inventoryItem = inventoryItems.find(
@@ -1192,12 +1188,12 @@ const InventoryComponent: React.FC<InventoryProps> = ({
       }
     );
 
-    // Filtra los ítems relevantes: Para análisis, solo los que tuvieron consumo.
+    // El .filter y .length posteriores funcionarán sin problemas:
     const relevantItems = itemsWithCategory.filter(
       (item) => !isAnalysis || (item.consumption || 0) > 0.001
     );
 
-    if (relevantItems.length === 0) {
+    if ((relevantItems as InventoryRecordItem[]).length === 0) {
       return (
         <Modal
           title={`Detalle: ${viewingRecord.label}`}
@@ -1207,22 +1203,13 @@ const InventoryComponent: React.FC<InventoryProps> = ({
           size="max-w-7xl"
         >
           <div className="text-center py-10 text-slate-500">
-            <p>
-              No se registraron artículos relevantes para mostrar en este
-              historial.
-            </p>
-            {/* CORRECCIÓN DE ERROR: Se reemplaza '>' por '&gt;' */}
-            {isAnalysis && (
-              <p className="text-sm mt-2">
-                Sólo se muestran artículos con consumo registrado (&gt; 0.001).
-              </p>
-            )}
+            <p>No se registraron artículos relevantes para mostrar.</p>
           </div>
         </Modal>
       );
     }
 
-    // Agrupar ítems por categoría
+    // Agrupar ítems
     const groupedHistoryItems = relevantItems.reduce((acc, item) => {
       const category = item.category;
       if (!acc[category]) {
@@ -1982,23 +1969,21 @@ const InventoryComponent: React.FC<InventoryProps> = ({
           </div>
 
           <div className="space-y-4">
-            {Object.entries(groupedItems)
+            {(Object.entries(groupedItems) as [string, InventoryItem[]][])
               .sort(([catA], [catB]) => {
                 const indexA = CATEGORY_ORDER.indexOf(catA);
                 const indexB = CATEGORY_ORDER.indexOf(catB);
-
                 if (indexA !== -1 && indexB !== -1) return indexA - indexB;
                 if (indexA !== -1) return -1;
                 if (indexB !== -1) return 1;
-
                 return catA.localeCompare(catB);
               })
               .map(([category, items]) => (
                 <CategoryAccordion
                   key={category}
                   title={category}
-                  itemCount={items.length}
-                  initialOpen={true} // ABRIR POR DEFECTO EN INVENTARIO
+                  itemCount={items.length} // Aquí items ya no será unknown
+                  initialOpen={true}
                 >
                   <div className="overflow-x-auto">
                     {/* 🛑 table-fixed Mantiene las columnas fijas a la derecha */}
@@ -2638,39 +2623,41 @@ const InventoryComponent: React.FC<InventoryProps> = ({
           <h3 className="text-l font-bold text-white mb-3 mt-8 border-t border-gray-700 pt-4">
             Registros Anteriores
           </h3>
-          {validInventoryHistory.length > 0 ? (
+          {(validInventoryHistory as any[]).length > 0 ? (
             <ul className="space-y-3">
-              {validInventoryHistory.map((record: InventoryRecord) => (
-                <li
-                  key={record.id}
-                  className="bg-slate-900/50 p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center hover:bg-slate-700/50 transition-colors"
-                >
-                  <div className="mb-2 sm:mb-0">
-                    <p className="font-semibold text-white">{record.label}</p>
-                    <p className="text-sm text-slate-400">
-                      {formatUTCToLocal(record.date)}
-                    </p>
-                  </div>
-                  <div className="flex gap-3 mt-2 sm:mt-0">
-                    {/* Botón Ver Detalles */}
-                    <button
-                      onClick={() => openRecordDetailModal(record)}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-1 px-4 rounded-lg flex items-center gap-2 transition duration-300"
-                      title="Ver Detalles"
-                    >
-                      Ver Detalles
-                    </button>
-                    {/* Botón Borrar Registro Individual */}
-                    <button
-                      onClick={() => handleDeleteRecord(record)}
-                      className="bg-red-600 hover:bg-red-700 text-white text-sm font-bold py-1 px-4 rounded-lg flex items-center justify-center transition duration-300"
-                      title={`Eliminar Registro: ${record.label}`}
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
-                  </div>
-                </li>
-              ))}
+              {(validInventoryHistory as any[]).map(
+                (record: InventoryRecord) => (
+                  <li
+                    key={record.id}
+                    className="bg-slate-900/50 p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center hover:bg-slate-700/50 transition-colors"
+                  >
+                    <div className="mb-2 sm:mb-0">
+                      <p className="font-semibold text-white">{record.label}</p>
+                      <p className="text-sm text-slate-400">
+                        {formatUTCToLocal(record.date)}
+                      </p>
+                    </div>
+                    <div className="flex gap-3 mt-2 sm:mt-0">
+                      {/* Botón Ver Detalles */}
+                      <button
+                        onClick={() => openRecordDetailModal(record)}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-1 px-4 rounded-lg flex items-center gap-2 transition duration-300"
+                        title="Ver Detalles"
+                      >
+                        Ver Detalles
+                      </button>
+                      {/* Botón Borrar Registro Individual */}
+                      <button
+                        onClick={() => handleDeleteRecord(record)}
+                        className="bg-red-600 hover:bg-red-700 text-white text-sm font-bold py-1 px-4 rounded-lg flex items-center justify-center transition duration-300"
+                        title={`Eliminar Registro: ${record.label}`}
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </li>
+                )
+              )}
             </ul>
           ) : (
             <div className="text-center py-10 text-slate-500">
