@@ -13,7 +13,7 @@ import { INVENTORY_LOCATIONS } from "./constants";
 // IMPORTANTE: Asegúrate de que este import sea correcto en tu entorno.
 import { api } from "./src/api";
 
-const userPrices: { [name: string]: number } = {
+export const userPrices: { [name: string]: number } = {
   Absolut: 11.45,
   Beluga: 28.85,
   Belvedere: 29.46,
@@ -153,10 +153,8 @@ const userPrices: { [name: string]: number } = {
   "Barril Moritz 30Lt": 115.71,
   "Barril Moritz Radler 30 Lt": 138.69,
   "Moritz 0%": 1.64,
-  "Moritz 7": 0.65,
+  "Moritz 7": 0.67,
   "Moritz EPIDOR": 1.62,
-  // 🛑 Se eliminan los precios placeholder que no estaban en la lista original
-  // El código ahora gestionará la falta de precio con un valor de 0
 };
 
 const initialStockByLocation = INVENTORY_LOCATIONS.reduce(
@@ -164,9 +162,7 @@ const initialStockByLocation = INVENTORY_LOCATIONS.reduce(
   {}
 );
 
-// CORRECCIÓN CLAVE: Renombrada a createInitialStockObject.
 // Función SOLO para crear el objeto de stock inicial de un artículo nuevo,
-// que siempre iniciará en 0 en todas las ubicaciones, excepto la forzada.
 const createInitialStockObject = (
   initialStock: number = 0,
   location = "Almacén"
@@ -176,7 +172,6 @@ const createInitialStockObject = (
 });
 
 // 💥 INVENTARIO: Items clave con stock inicial para probar el cálculo del VALOR TOTAL
-// He reajustado los stocks de prueba para que funcionen con la carga de la DB
 const initialInventoryItems: InventoryItem[] = [
   // Vodka
   {

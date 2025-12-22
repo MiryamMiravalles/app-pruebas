@@ -32,6 +32,7 @@ import {
   PieChart,
   Pie,
 } from "recharts";
+import { userPrices } from "../App";
 interface InventoryProps {
   inventoryItems: InventoryItem[];
   purchaseOrders: PurchaseOrder[];
@@ -524,7 +525,6 @@ const InventoryComponent: React.FC<InventoryProps> = ({
   const [analysisDate, setAnalysisDate] = useState("");
 
   const [searchTerm, setSearchTerm] = useState("");
-
   const [orderSearchTerm, setOrderSearchTerm] = useState("");
 
   const [viewingRecord, setViewingRecord] = useState<InventoryRecord | null>(
@@ -534,52 +534,63 @@ const InventoryComponent: React.FC<InventoryProps> = ({
   const [selectedLocationColumn, setSelectedLocationColumn] = useState<
     string | "all"
   >("all");
+
+  // 1. La función principal corregida
   const handleCaptureOrder = async (base64Data: string) => {
     try {
-      // 1. Preparamos los nombres para ayudar a la IA a identificar tus productos
       const inventoryNames = inventoryItems.map((item) => item.name);
-
-      // 2. Llamada a la API
       const data = await api.ai.processOrder(base64Data, inventoryNames);
 
-      if (!data.items || data.items.length === 0) {
-        alert("Gemini no encontró productos en la imagen.");
-        return;
-      }
+      if (!data || !data.items) return;
 
-      // 3. Emparejamiento (Match) de los productos detectados con tu inventario
+      const cleanNumber = (val: any) => {
+        if (typeof val === "string") {
+          // Reemplazamos coma por punto y quitamos todo lo que no sea número o punto
+          const normalized = val.replace(",", ".").replace(/[^0-9.]/g, "");
+          return parseFloat(normalized);
+        }
+        return Number(val) || 0;
+      };
+
       const matchedItems = data.items
         .map((detected: any) => {
           const found = inventoryItems.find((i) =>
-            i.name
-              .toLowerCase()
-              .trim()
-              .includes(detected.name.toLowerCase().trim())
+            i.name.toLowerCase().includes(detected.name.toLowerCase())
           );
 
           if (found) {
+            const lineTotalNet = cleanNumber(detected.linePrice);
+            const qty = Number(detected.quantity) || 0;
+
+            // 🛑 PRECISIÓN: Calculamos el precio unitario.
+            // Usamos toFixed(4) y volvemos a número para tener hasta 4 decimales si es necesario.
+            // Esto es clave para productos como la Moritz donde el precio real es 0.6733
+            const unitPriceNet =
+              qty > 0 ? Number((lineTotalNet / qty).toFixed(4)) : 0;
+
             return {
               inventoryItemId: found.id,
-              quantity: Number(detected.quantity) || 0,
-              costAtTimeOfPurchase: 0,
-              pricePerUnitWithoutIVA: found.pricePerUnitWithoutIVA || 0,
+              quantity: qty,
+              costAtTimeOfPurchase: unitPriceNet, // Para el histórico
+              pricePerUnitWithoutIVA: unitPriceNet,
             };
           }
           return null;
         })
         .filter(Boolean);
 
-      // 4. Abrimos el modal con los datos
+      // Mantenemos el total exacto del papel
+      const totalPapel = cleanNumber(data.totalAmount);
+
       openOrderModal({
-        orderDate: new Date().toISOString().split("T")[0],
-        supplierName: "Escaneado con Gemini",
+        orderDate: data.orderDate || new Date().toISOString().split("T")[0],
+        supplierName: data.supplierName || "VINS AVINYÓ",
         items: matchedItems,
         status: PurchaseOrderStatus.Pending,
-        totalAmount: 0,
+        totalAmount: totalPapel,
       } as PurchaseOrder);
     } catch (e: any) {
-      console.error("Error completo:", e);
-      alert("Error de conexión con el servidor: " + e.message);
+      console.error("Error al capturar pedido:", e);
     }
   };
 
@@ -906,33 +917,53 @@ const InventoryComponent: React.FC<InventoryProps> = ({
 
   const handleSaveOrder = () => {
     const hasItems = currentPurchaseOrder.items.length > 0;
-
     const allItemsAreValid = currentPurchaseOrder.items.every(
       (item) => item.quantity > 0.001 && item.inventoryItemId.trim() !== ""
     );
-    const hasSupplierName = currentPurchaseOrder.supplierName.trim() !== "";
 
-    if (!hasSupplierName || !hasItems || !allItemsAreValid) {
-      // 🛑 Validación estricta
+    if (
+      !currentPurchaseOrder.supplierName.trim() ||
+      !hasItems ||
+      !allItemsAreValid
+    ) {
       alert(
-        "Por favor, introduce el proveedor y asegúrate de que el pedido contiene al menos un artículo válido (cantidad positiva y seleccionado)."
+        "Revisa el proveedor y que todos los artículos tengan cantidad y nombre."
       );
       return;
     }
+
+    // Sincronización de precios con 5 decimales
+    currentPurchaseOrder.items.forEach((orderItem) => {
+      const originalItem = inventoryItems.find(
+        (i) => i.id === orderItem.inventoryItemId
+      );
+      if (originalItem && orderItem.pricePerUnitWithoutIVA > 0) {
+        userPrices[originalItem.name] = orderItem.pricePerUnitWithoutIVA;
+        onSaveInventoryItem({
+          ...originalItem,
+          pricePerUnitWithoutIVA: orderItem.pricePerUnitWithoutIVA,
+        });
+      }
+    });
+
+    // 2. Calcular total del pedido redondeado
+    const calculatedTotalRaw = currentPurchaseOrder.items.reduce(
+      (acc, i) => acc + i.quantity * i.pricePerUnitWithoutIVA,
+      0
+    );
+
     const orderToSave: PurchaseOrder = {
       ...currentPurchaseOrder,
       id: (currentPurchaseOrder as PurchaseOrder).id || crypto.randomUUID(),
-      status: (currentPurchaseOrder as PurchaseOrder).status
-        ? currentPurchaseOrder.status
-        : PurchaseOrderStatus.Pending,
-      totalAmount: 0,
+      status:
+        (currentPurchaseOrder as PurchaseOrder).status ||
+        PurchaseOrderStatus.Pending,
+      // 🛑 FORZAMOS EL REDONDEO AQUÍ ANTES DE GUARDAR
+      totalAmount: Number(calculatedTotalRaw.toFixed(2)),
     } as PurchaseOrder;
 
     onSavePurchaseOrder(orderToSave);
-
-    alert(
-      "Pedido guardado correctamente. Los artículos no aparecerán en 'En Pedidos' hasta ser recibidos"
-    );
+    alert("Pedido guardado con el total redondeado correctamente.");
     closeOrderModal();
   };
 
@@ -1032,19 +1063,22 @@ const InventoryComponent: React.FC<InventoryProps> = ({
   };
 
   const handleOrderQuantityChange = (index: number, value: string) => {
-    if (value && !/^\d*[,]?\d*$/.test(value)) {
-      return;
-    }
-    setTempOrderQuantities((prev) => ({ ...prev, [index]: value }));
+    if (value === "" || /^\d*([,.]\d*)?$/.test(value)) {
+      // 2. Guardamos el TEXTO tal cual en el estado temporal (para que no borre la coma)
+      setTempOrderQuantities((prev) => ({ ...prev, [index]: value }));
 
-    const parsedQuantity = parseDecimal(value);
-    setCurrentPurchaseOrder((prev) => {
-      const newItems = [...prev.items]; // Corregido el acceso al array, asegurando que existe antes de actualizar
-      if (newItems[index] && newItems[index].quantity !== parsedQuantity) {
-        newItems[index] = { ...newItems[index], quantity: parsedQuantity };
-      }
-      return { ...prev, items: newItems };
-    });
+      // 3. Convertimos a número para el cálculo interno, pero SOLO si es un valor válido
+      // Reemplazamos coma por punto para que parseFloat funcione
+      const numericValue = parseFloat(value.replace(",", ".")) || 0;
+
+      setCurrentPurchaseOrder((prev) => {
+        const newItems = [...prev.items];
+        if (newItems[index]) {
+          newItems[index].quantity = numericValue;
+        }
+        return { ...prev, items: newItems };
+      });
+    }
   };
 
   const handleOrderItemChange = (
@@ -2033,28 +2067,20 @@ const InventoryComponent: React.FC<InventoryProps> = ({
 
   const renderOrderForm = () => {
     const hasItems = currentPurchaseOrder.items.length > 0;
-
     const allItemsAreValid = currentPurchaseOrder.items.every(
       (item) => item.quantity > 0.001 && item.inventoryItemId.trim() !== ""
     );
     const hasSupplierName = currentPurchaseOrder.supplierName.trim() !== "";
     const canSave = hasSupplierName && hasItems && allItemsAreValid;
 
-    let disabledTitle = "Guardar pedido";
+    const currentTotalRaw = currentPurchaseOrder.items.reduce((acc, item) => {
+      return acc + item.quantity * (item.pricePerUnitWithoutIVA || 0);
+    }, 0);
 
-    if (!hasSupplierName) {
-      disabledTitle = "Introduce el proveedor para guardar";
-    } else if (!hasItems) {
-      disabledTitle = "Añade al menos un artículo al pedido para guardar";
-    } else if (!allItemsAreValid) {
-      disabledTitle =
-        "Asegúrate de que todos los artículos tienen cantidad positiva y están seleccionados";
-    }
+    const currentTotal = Math.round(currentTotalRaw * 100) / 100;
 
     return (
-      /* Contenedor principal con flex-col y altura máxima para forzar el scroll interno */
       <div className="flex flex-col max-h-[80vh] space-y-4">
-        {/* SECCIÓN FIJA SUPERIOR: Fecha, Proveedor y Buscador */}
         <div className="flex-shrink-0 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input
@@ -2063,136 +2089,170 @@ const InventoryComponent: React.FC<InventoryProps> = ({
               onChange={(e) => handleOrderChange("orderDate", e.target.value)}
               className="bg-gray-700 text-white rounded p-2 w-full border border-gray-600 focus:ring-2 focus:ring-indigo-500"
             />
-            <div className="relative">
-              <input
-                type="text"
-                list="supplier-list"
-                placeholder="Proveedor"
-                value={currentPurchaseOrder.supplierName}
-                onChange={(e) =>
-                  handleOrderChange("supplierName", e.target.value)
-                }
-                className="bg-gray-700/50 text-white rounded p-2 w-full border border-gray-600 focus:ring-2 focus:ring-indigo-500"
-              />
-              <datalist id="supplier-list">
-                {suppliers.map((s) => (
-                  <option key={s} value={s} />
-                ))}
-              </datalist>
-            </div>
+            <input
+              type="text"
+              placeholder="Proveedor"
+              value={currentPurchaseOrder.supplierName}
+              onChange={(e) =>
+                handleOrderChange("supplierName", e.target.value)
+              }
+              className="bg-gray-700 text-white rounded p-2 w-full border border-gray-600 focus:ring-2 focus:ring-indigo-500"
+            />
           </div>
 
-          <h3 className="text-lg font-bold text-white pt-2 border-b border-gray-700 pb-2">
-            Artículos del Pedido
-          </h3>
-
-          {/* Campo de búsqueda de productos */}
+          {/* 🔍 BUSCADOR CON SELECCIÓN POR ENTER */}
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
               <SearchIcon className="h-4 w-4" />
             </div>
             <input
               type="text"
-              placeholder="Buscar producto para añadir..."
+              placeholder="Buscar bebida y presiona Enter..."
               value={orderSearchTerm}
               onChange={(e) => setOrderSearchTerm(e.target.value)}
-              className="bg-gray-700 text-white rounded-lg pl-10 pr-4 py-2 w-full border border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-400"
+              onKeyDown={(e) => {
+                if (
+                  e.key === "Enter" &&
+                  orderSearchTerm &&
+                  filteredOrderItems.length > 0
+                ) {
+                  e.preventDefault();
+                  handleAddProductFromSearch(filteredOrderItems[0]);
+                }
+              }}
+              className="bg-gray-700 text-white rounded-lg pl-10 pr-4 py-2 w-full border border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
-          </div>
 
-          {/* Resultados de búsqueda (Sugestiones) */}
-          {orderSearchTerm && filteredOrderItems.length > 0 && (
-            <div className="bg-slate-900/90 rounded-md p-2 space-y-1 border border-indigo-500/30 max-h-40 overflow-y-auto">
-              {filteredOrderItems.slice(0, 5).map((item) => {
-                const isAlreadyInOrder = currentPurchaseOrder.items.some(
-                  (oi) => oi.inventoryItemId === item.id
-                );
-
-                return (
-                  <div
+            {orderSearchTerm && filteredOrderItems.length > 0 && (
+              <div className="absolute z-50 w-full bg-slate-800 border border-slate-600 rounded-md mt-1 max-h-40 overflow-y-auto shadow-2xl">
+                {filteredOrderItems.slice(0, 6).map((item, idx) => (
+                  <button
                     key={item.id}
-                    className={`flex justify-between items-center p-2 rounded-sm ${
-                      isAlreadyInOrder
-                        ? "opacity-50 cursor-not-allowed"
-                        : "hover:bg-slate-700/50"
+                    onClick={() => handleAddProductFromSearch(item)}
+                    className={`w-full text-left p-2 hover:bg-slate-700 text-white text-sm border-b border-slate-700 transition-colors ${
+                      idx === 0 ? "bg-slate-700/50" : ""
                     }`}
                   >
-                    <span className="text-white text-sm">{item.name}</span>
-                    <button
-                      onClick={() => handleAddProductFromSearch(item)}
-                      className={`px-2 py-1 rounded text-white text-xs flex items-center gap-1 ${
-                        isAlreadyInOrder
-                          ? "bg-gray-500 cursor-not-allowed"
-                          : "bg-green-600 hover:bg-green-700"
-                      }`}
-                      disabled={isAlreadyInOrder}
-                    >
-                      {isAlreadyInOrder ? "Añadido" : "✅ Añadir"}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                    {item.name}{" "}
+                    {idx === 0 && (
+                      <span className="text-[10px] text-indigo-400 float-right mt-1">
+                        ↵ Enter
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* 🛑 SECCIÓN DINÁMICA CON SCROLL: Lista de ítems añadidos */}
-        <div
-          className="flex-grow overflow-y-auto pr-2 space-y-2 custom-scrollbar"
-          style={{ minHeight: "150px" }}
-        >
+        {/* LISTA DE ARTÍCULOS EDITABLE */}
+        <div className="flex-grow overflow-y-auto pr-2 space-y-2 border-t border-gray-700 pt-4 custom-scrollbar">
           {currentPurchaseOrder.items.map((orderItem, index) => {
             const itemDetails = inventoryItems.find(
-              (item) => item.id === orderItem.inventoryItemId
-            );
-            const availableItems = inventoryItems.filter(
-              (item) =>
-                !currentPurchaseOrder.items.some(
-                  (oi, i) => i !== index && oi.inventoryItemId === item.id
-                )
+              (i) => i.id === orderItem.inventoryItemId
             );
 
             return (
               <div
                 key={index}
-                className="flex gap-2 items-center p-3 bg-gray-900/50 rounded-lg border border-gray-800"
+                className="grid grid-cols-12 gap-2 items-center p-2 bg-gray-900/50 rounded-lg border border-gray-800"
               >
-                {orderItem.inventoryItemId && itemDetails ? (
-                  <span className="text-white flex-grow font-medium truncate">
-                    {itemDetails.name}
-                  </span>
-                ) : (
-                  <select
-                    value={orderItem.inventoryItemId}
-                    onChange={(e) =>
-                      handleOrderItemChange(
-                        index,
-                        "inventoryItemId",
-                        e.target.value
-                      )
+                <div className="col-span-5">
+                  {!orderItem.inventoryItemId ? (
+                    <select
+                      value={orderItem.inventoryItemId}
+                      onChange={(e) =>
+                        handleOrderItemChange(
+                          index,
+                          "inventoryItemId",
+                          e.target.value
+                        )
+                      }
+                      className="bg-gray-800 text-white text-[10px] rounded p-1 w-full border border-indigo-500"
+                    >
+                      <option value="">Seleccionar bebida...</option>
+                      {inventoryItems
+                        .filter(
+                          (i) => !i.name.toLowerCase().includes("cajas vacias")
+                        )
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((i) => (
+                          <option key={i.id} value={i.id}>
+                            {i.name}
+                          </option>
+                        ))}
+                    </select>
+                  ) : (
+                    <div className="text-white text-[11px] font-bold truncate">
+                      {itemDetails?.name}
+                    </div>
+                  )}
+                </div>
+
+                {/* 🛑 CANTIDAD CORREGIDA: Permite escribir "0,2" libremente */}
+                <div className="col-span-3">
+                  <input
+                    type="text"
+                    placeholder="Cant."
+                    // Usamos el estado temporal de texto
+                    value={tempOrderQuantities[index] ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+
+                      // Permitimos: cadena vacía, números, y una sola coma o punto
+                      // Esta expresión regular permite escribir "0," sin borrarlo
+                      if (val === "" || /^\d*([,.]\d*)?$/.test(val)) {
+                        handleOrderQuantityChange(index, val);
+                      }
+                    }}
+                    // Esto asegura que el teclado numérico en móviles permita la coma
+                    inputMode="decimal"
+                    className="bg-gray-800 text-white rounded p-1.5 w-full text-center text-xs border border-gray-700 focus:ring-1 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+
+                <div className="col-span-3">
+                  <input
+                    type="text"
+                    placeholder="P.U. Neto"
+                    value={
+                      orderItem.pricePerUnitWithoutIVA === 0
+                        ? ""
+                        : String(orderItem.pricePerUnitWithoutIVA).replace(
+                            ".",
+                            ","
+                          )
                     }
-                    className="bg-gray-700 text-white rounded p-2 flex-grow border border-gray-600"
-                  >
-                    <option value="">Seleccionar Artículo</option>
-                    {availableItems.map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <input
-                  type="text"
-                  placeholder="Cant."
-                  value={tempOrderQuantities[index] ?? ""}
-                  onChange={(e) =>
-                    handleOrderQuantityChange(index, e.target.value)
-                  }
-                  className="bg-gray-700 text-white rounded p-2 w-20 text-center border border-gray-600"
-                />
+                    onChange={(e) => {
+                      const inputValue = e.target.value;
+                      if (inputValue === "") {
+                        const newItems = [...currentPurchaseOrder.items];
+                        newItems[index].pricePerUnitWithoutIVA = 0;
+                        setCurrentPurchaseOrder((prev) => ({
+                          ...prev,
+                          items: newItems,
+                        }));
+                        return;
+                      }
+                      const normalizedValue = inputValue.replace(",", ".");
+                      if (/^\d*\.?\d{0,5}$/.test(normalizedValue)) {
+                        const newItems = [...currentPurchaseOrder.items];
+                        newItems[index].pricePerUnitWithoutIVA =
+                          parseFloat(normalizedValue) || 0;
+                        setCurrentPurchaseOrder((prev) => ({
+                          ...prev,
+                          items: newItems,
+                        }));
+                      }
+                    }}
+                    className="bg-gray-800 text-yellow-400 rounded p-1.5 w-full text-center text-xs border border-gray-700 font-bold focus:ring-1 focus:ring-yellow-500 outline-none"
+                  />
+                </div>
+
                 <button
                   onClick={() => removeOrderItem(index)}
-                  className="p-2 bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white rounded-md transition-colors"
+                  className="col-span-1 text-red-500 flex justify-center"
                 >
                   <TrashIcon className="h-4 w-4" />
                 </button>
@@ -2200,35 +2260,47 @@ const InventoryComponent: React.FC<InventoryProps> = ({
             );
           })}
 
-          {/* Botón para añadir manualmente al final de la lista de scroll */}
           <button
             onClick={addOrderItem}
-            className="w-full py-2 border-2 border-dashed border-gray-700 rounded-lg text-indigo-400 hover:text-indigo-300 hover:border-indigo-500/50 text-xs font-medium transition-colors"
+            className="w-full py-2 border-2 border-dashed border-gray-700 rounded-lg text-indigo-400 text-xs mt-2 font-bold"
           >
-            + Añadir Artículo (manualmente)
+            + Añadir Línea Manual
           </button>
         </div>
 
-        {/* SECCIÓN FIJA INFERIOR: Acciones principales */}
-        <div className="flex-shrink-0 flex justify-end p-4 border-t border-gray-700 mt-2 bg-gray-800 rounded-b-lg">
-          <button
-            onClick={closeOrderModal}
-            className="bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg mr-2 text-sm transition duration-300"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSaveOrder}
-            disabled={!canSave}
-            className={`font-medium py-2 px-6 rounded-lg text-sm transition duration-300 ${
-              canSave
-                ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/20"
-                : "bg-slate-700 text-slate-500 cursor-not-allowed"
-            }`}
-            title={disabledTitle}
-          >
-            Guardar
-          </button>
+        {/* TOTAL CALCULADO */}
+        <div className="flex-shrink-0 p-4 border-t border-gray-700 bg-gray-800">
+          <div className="flex justify-between items-center mb-4">
+            <span className="text-gray-400 text-sm">
+              Total Pedido (Sin IVA):
+            </span>
+            <span className="text-xl font-bold text-yellow-400">
+              {currentTotal.toLocaleString("es-ES", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}{" "}
+              €
+            </span>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={closeOrderModal}
+              className="px-4 py-2 bg-gray-600 text-white rounded-lg text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSaveOrder}
+              disabled={!canSave}
+              className={`px-6 py-2 rounded-lg font-bold text-sm ${
+                canSave
+                  ? "bg-indigo-600 text-white shadow-lg"
+                  : "bg-slate-700 text-slate-500"
+              }`}
+            >
+              Guardar Pedido
+            </button>
+          </div>
         </div>
       </div>
     );
