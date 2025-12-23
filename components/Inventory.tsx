@@ -528,7 +528,9 @@ const InventoryComponent: React.FC<InventoryProps> = ({
   const [currentInventoryItem, setCurrentInventoryItem] =
     useState<Partial<InventoryItem>>(emptyInventoryItem);
 
-  // 🛑 AÑADIDO: Estado temporal para el input de precio decimal
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scannedResult, setScannedResult] = useState<string | null>(null);
+
   const [tempPriceString, setTempPriceString] = useState("");
 
   const [isOrderModalOpen, setOrderModalOpen] = useState(false);
@@ -567,6 +569,7 @@ const InventoryComponent: React.FC<InventoryProps> = ({
       supplierName: formattedSupplier, // Ahora se guarda ya formateado
     }));
   };
+
   // 1. La función principal corregida
   const handleCaptureOrder = async (base64Data: string) => {
     try {
@@ -628,7 +631,38 @@ const InventoryComponent: React.FC<InventoryProps> = ({
       console.error("Error al capturar pedido:", e);
     }
   };
+  const handleBarcodeScan = (decodedText: string) => {
+    // 1. Buscamos el ítem por el campo 'barcode'
+    const item = inventoryItems.find((i) => i.barcode === decodedText);
 
+    if (item) {
+      // 2. Pedimos la cantidad (acepta 0,5 gracias a parseDecimal)
+      const qty = window.prompt(
+        `Producto detectado: ${item.name}\nIntroduce la cantidad a sumar (ej: 0,5 o 1):`,
+        "1"
+      );
+
+      if (qty !== null) {
+        const numericQty = parseDecimal(qty);
+
+        // 3. Actualizamos el stock (por defecto en Almacén)
+        const updatedStock = {
+          ...item.stockByLocation,
+          Almacén: (Number(item.stockByLocation?.Almacén) || 0) + numericQty,
+        };
+
+        onSaveInventoryItem({
+          ...item,
+          stockByLocation: updatedStock,
+        });
+
+        alert(`Añadido ${numericQty} a ${item.name}`);
+      }
+    } else {
+      alert("Código de barras no encontrado en tu inventario: " + decodedText);
+    }
+    setIsScannerOpen(false);
+  };
   const calculateTotalStock = (item: InventoryItem) => {
     if (!item.stockByLocation) return 0;
     // Aseguramos que los valores son tratados como números para la suma.
@@ -2474,7 +2508,15 @@ const InventoryComponent: React.FC<InventoryProps> = ({
                 {/* Ocultar texto hasta md */}
                 <span className="hidden md:inline">Guardar</span>
               </button>
-
+              {/* 🔍 BOTÓN ESCANEAR CÓDIGO DE BARRAS (Insertado aquí) */}
+              <button
+                onClick={() => setIsScannerOpen(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 px-2 md:px-3 rounded-lg flex items-center justify-center gap-1 text-sm transition duration-300 h-7 w-8 md:w-auto"
+                title="Escanear Código de Barras"
+              >
+                <span className="text-base">🔍</span>
+                <span className="hidden md:inline">Código de barras</span>
+              </button>
               {/* 🛑 BOTÓN NUEVO PRODUCTO: Ancho fijo 'w-8' en móvil y padding 'px-2' */}
               <button
                 onClick={() => openInventoryModal(undefined)}
