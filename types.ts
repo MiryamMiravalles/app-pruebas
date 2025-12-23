@@ -4,6 +4,7 @@ export interface InventoryItem {
   id: string;
   name: string;
   category: string;
+  barcode?: string;
   pricePerUnitWithoutIVA: number;
   stockByLocation: { [key: string]: number };
 }
