@@ -2090,7 +2090,61 @@ const InventoryComponent: React.FC<InventoryProps> = ({
       </div>
     </div>
   );
+  const handleGenerateSmartOrder = () => {
+    if (!lastAnalysisRecord) {
+      alert(
+        "Se necesita al menos un análisis guardado para sugerir cantidades."
+      );
+      return;
+    }
 
+    const smartItems: OrderItem[] = inventoryItems
+      .map((item) => {
+        // Buscamos el consumo en el último registro de tipo 'analysis'
+        const lastConsumption =
+          lastAnalysisRecord.items.find(
+            (recordItem) => recordItem.itemId === item.id
+          )?.consumption || 0;
+
+        const currentStock = calculateTotalStock(item);
+
+        // Si lo que tenemos es menos de lo que gastamos la semana pasada, sugerimos reposición
+        if (currentStock < lastConsumption) {
+          return {
+            inventoryItemId: item.id,
+            quantity: Math.ceil(lastConsumption - currentStock),
+            costAtTimeOfPurchase: 0,
+            pricePerUnitWithoutIVA: item.pricePerUnitWithoutIVA || 0,
+          };
+        }
+        return null;
+      })
+      .filter((item): item is OrderItem => item !== null);
+
+    if (smartItems.length === 0) {
+      alert("Tienes stock suficiente de todo según el consumo previo.");
+      return;
+    }
+
+    // Actualizamos el pedido actual
+    setCurrentPurchaseOrder((prev) => ({ ...prev, items: smartItems }));
+
+    // 🛑 CRUCIAL: Actualizamos los estados temporales para que los inputs
+    // de la lista muestren los valores amarillos correctamente.
+    const tempQs: Record<number, string> = {};
+    const tempPs: Record<number, string> = {};
+
+    smartItems.forEach((item, idx) => {
+      tempQs[idx] = String(item.quantity).replace(".", ",");
+      tempPs[idx] =
+        item.pricePerUnitWithoutIVA > 0
+          ? String(item.pricePerUnitWithoutIVA).replace(".", ",")
+          : "";
+    });
+
+    setTempOrderQuantities(tempQs);
+    setTempOrderPrices(tempPs);
+  };
   const renderOrderForm = () => {
     const hasItems = currentPurchaseOrder.items.length > 0;
     const allItemsAreValid = currentPurchaseOrder.items.every(
@@ -2120,13 +2174,25 @@ const InventoryComponent: React.FC<InventoryProps> = ({
               placeholder="Proveedor"
               value={currentPurchaseOrder.supplierName}
               onChange={(e) => {
-                // 💡 Formateamos el texto en tiempo real
                 const formatted = formatToTitleCase(e.target.value);
                 handleOrderChange("supplierName", formatted);
               }}
               className="bg-gray-700 text-white rounded p-2 w-full border border-gray-600 focus:ring-2 focus:ring-indigo-500"
             />
           </div>
+
+          {/* 🧠 BOTÓN DE SUGERENCIA INTELIGENTE - COLOR CORREGIDO PARA VISIBILIDAD */}
+          <button
+            onClick={() => {
+              console.log("Ejecutando sugerencia...");
+              handleGenerateSmartOrder();
+            }}
+            type="button"
+            className="w-full py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-[0_4px_0_0_rgba(5,150,105,1)] active:shadow-none active:translate-y-[2px]"
+          >
+            <span className="text-lg">🧠</span> Sugerir Pedido (Consumo
+            Anterior)
+          </button>
 
           {/* 🔍 BUSCADOR CON SELECCIÓN POR ENTER */}
           <div className="relative">
@@ -2135,7 +2201,7 @@ const InventoryComponent: React.FC<InventoryProps> = ({
             </div>
             <input
               type="text"
-              placeholder="Buscar bebida y presiona Enter..."
+              placeholder="Buscar producto"
               value={orderSearchTerm}
               onChange={(e) => setOrderSearchTerm(e.target.value)}
               onKeyDown={(e) => {
@@ -2292,7 +2358,7 @@ const InventoryComponent: React.FC<InventoryProps> = ({
             onClick={addOrderItem}
             className="w-full py-2 border-2 border-dashed border-gray-700 rounded-lg text-indigo-400 text-xs mt-2 font-bold"
           >
-            + Añadir Pedido Manual
+            + Añadir Producto Manual
           </button>
         </div>
         {/* TOTAL CALCULADO */}
