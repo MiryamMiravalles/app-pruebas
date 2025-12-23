@@ -1082,19 +1082,16 @@ const InventoryComponent: React.FC<InventoryProps> = ({
     field: "inventoryItemId",
     value: string
   ) => {
-    // Validación para evitar duplicados si se selecciona manualmente
-    const isAlreadyInOrder = currentPurchaseOrder.items.some(
-      (oi, i) => i !== index && oi.inventoryItemId === value
-    );
-
-    if (isAlreadyInOrder) {
-      alert("Este artículo ya ha sido añadido a la lista.");
-      return;
-    }
-
+    const selectedItem = inventoryItems.find((i) => i.id === value);
     const newItems = [...currentPurchaseOrder.items];
-    const itemToUpdate = { ...newItems[index], [field]: value };
-    newItems[index] = itemToUpdate;
+
+    newItems[index] = {
+      ...newItems[index],
+      [field]: value,
+      // Asignamos el precio internamente aunque no haya recuadro
+      pricePerUnitWithoutIVA: selectedItem?.pricePerUnitWithoutIVA || 0,
+    };
+
     setCurrentPurchaseOrder((prev) => ({ ...prev, items: newItems }));
   };
 
@@ -2143,7 +2140,6 @@ const InventoryComponent: React.FC<InventoryProps> = ({
         </div>
 
         {/* LISTA DE ARTÍCULOS EDITABLE */}
-        {/* LISTA DE ARTÍCULOS EDITABLE */}
         <div className="flex-grow overflow-y-auto pr-2 space-y-2 border-t border-gray-700 pt-4 custom-scrollbar">
           {currentPurchaseOrder.items.map((orderItem, index) => {
             const itemDetails = inventoryItems.find(
@@ -2155,8 +2151,8 @@ const InventoryComponent: React.FC<InventoryProps> = ({
                 key={index}
                 className="grid grid-cols-12 gap-2 items-center p-2 bg-gray-900/50 rounded-lg border border-gray-800"
               >
-                {/* ARTÍCULO: Ocupa 8 columnas ahora para rellenar el hueco */}
-                <div className="col-span-8">
+                {/* 1. SELECCIÓN DE BEBIDA (col-span-6) */}
+                <div className="col-span-6">
                   {!orderItem.inventoryItemId ? (
                     <select
                       value={orderItem.inventoryItemId}
@@ -2188,11 +2184,11 @@ const InventoryComponent: React.FC<InventoryProps> = ({
                   )}
                 </div>
 
-                {/* CANTIDAD: Ocupa 3 columnas */}
-                <div className="col-span-3">
+                {/* 2. CANTIDAD (col-span-2) - AHORA AMARILLO */}
+                <div className="col-span-2">
                   <input
                     type="text"
-                    placeholder="P.U. Neto"
+                    placeholder="Cant."
                     value={tempOrderQuantities[index] ?? ""}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -2201,11 +2197,53 @@ const InventoryComponent: React.FC<InventoryProps> = ({
                       }
                     }}
                     inputMode="decimal"
-                    className="bg-gray-800 text-yellow-400 rounded p-1.5 w-full text-center text-xs border border-gray-700 focus:ring-1 focus:ring-indigo-500 outline-none"
+                    className="bg-gray-800 text-white font-bold rounded p-1.5 w-full text-center text-xs border border-gray-700 focus:ring-1 focus:ring-indigo-500 outline-none"
                   />
                 </div>
 
-                {/* BOTÓN ELIMINAR: Ocupa 1 columna */}
+                {/* 3. P.U. NETO (col-span-3) - RECUPERADO Y AMARILLO */}
+                <div className="col-span-3">
+                  <input
+                    type="text"
+                    placeholder="P.U. Neto"
+                    // Muestra el precio actual con coma para facilitar la edición
+                    value={
+                      tempOrderPrices[index] ??
+                      (orderItem.pricePerUnitWithoutIVA === 0
+                        ? ""
+                        : String(orderItem.pricePerUnitWithoutIVA).replace(
+                            ".",
+                            ","
+                          ))
+                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      // Permitimos números, una coma/punto y hasta 5 decimales
+                      if (val === "" || /^\d*([,.]\d{0,5})?$/.test(val)) {
+                        setTempOrderPrices((prev) => ({
+                          ...prev,
+                          [index]: val,
+                        }));
+
+                        // Convertimos a número real para el cálculo del total
+                        const numericVal =
+                          parseFloat(val.replace(",", ".")) || 0;
+                        const newItems = [...currentPurchaseOrder.items];
+                        if (newItems[index]) {
+                          newItems[index].pricePerUnitWithoutIVA = numericVal;
+                          setCurrentPurchaseOrder((prev) => ({
+                            ...prev,
+                            items: newItems,
+                          }));
+                        }
+                      }
+                    }}
+                    inputMode="decimal"
+                    className="bg-gray-800 text-yellow-400 font-bold rounded p-1.5 w-full text-center text-xs border border-gray-700 focus:ring-1 focus:ring-yellow-500 outline-none"
+                  />
+                </div>
+
+                {/* 4. BOTÓN ELIMINAR (col-span-1) */}
                 <button
                   onClick={() => removeOrderItem(index)}
                   className="col-span-1 text-red-500 flex justify-center"
@@ -2213,17 +2251,15 @@ const InventoryComponent: React.FC<InventoryProps> = ({
                   <TrashIcon className="h-4 w-4" />
                 </button>
               </div>
-            ); // Cierre del return
+            );
           })}{" "}
-          {/* Cierre del .map */}
           <button
             onClick={addOrderItem}
             className="w-full py-2 border-2 border-dashed border-gray-700 rounded-lg text-indigo-400 text-xs mt-2 font-bold"
           >
-            + Añadir Línea Manual
+            + Añadir Pedido Manual
           </button>
         </div>
-
         {/* TOTAL CALCULADO */}
         <div className="flex-shrink-0 p-4 border-t border-gray-700 bg-gray-800">
           <div className="flex justify-between items-center mb-4">
