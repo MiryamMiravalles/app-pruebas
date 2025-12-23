@@ -2092,7 +2092,30 @@ const InventoryComponent: React.FC<InventoryProps> = ({
           </span>
         </div>
       </div>
+      {/* SECCIÓN CODIGO DE BARRAS NUEVO */}
 
+      <div className="flex flex-col gap-1">
+        <label className="text-xs text-slate-400 font-medium ml-1">
+          Código de Barras
+        </label>
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Escanear o escribir código..."
+            value={currentInventoryItem.barcode || ""}
+            onChange={(e) =>
+              setCurrentInventoryItem({
+                ...currentInventoryItem,
+                barcode: e.target.value,
+              })
+            }
+            className="bg-gray-700 text-white rounded p-2 w-full border border-gray-600 focus:ring-2 focus:ring-indigo-500 pl-10"
+          />
+          <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none opacity-50">
+            🔍
+          </span>
+        </div>
+      </div>
       {/* SECCIÓN CATEGORÍA */}
       <div className="flex flex-col gap-1">
         <label className="text-xs text-slate-400 font-medium ml-1">
@@ -3241,6 +3264,38 @@ const InventoryComponent: React.FC<InventoryProps> = ({
       )}
 
       {viewingRecord && renderInventoryRecordDetailModal()}
+      {isScannerOpen && (
+        <div className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-slate-800 p-6 rounded-2xl w-full max-w-md border border-slate-700 shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-white font-bold text-sm flex items-center gap-2">
+                <span className="text-l">📷</span> Lector Código de Barras
+              </h3>
+              <button
+                onClick={() => setIsScannerOpen(false)}
+                className="bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white px-1.5 py-0.5 rounded-lg transition-colors text-sm font-bold border border-red-500/30"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            {/* 🛑 EL ID DEBE SER "reader" PARA QUE EL EFFECT LO ENCUENTRE */}
+            <div
+              id="reader"
+              className="overflow-hidden rounded-xl border-2 border-indigo-500/50 bg-slate-900 aspect-square shadow-inner"
+            ></div>
+
+            <div className="mt-6 text-center space-y-2">
+              <p className="text-slate-200 text-sm font-medium">
+                Enfoca el código de barras de la botella
+              </p>
+              <p className="text-slate-500 text-[11px] italic">
+                Permite que la cámara enfoque automáticamente
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
