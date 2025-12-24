@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import { Html5QrcodeScanner, Html5Qrcode } from "html5-qrcode";
 import {
   InventoryItem,
   PurchaseOrder,
@@ -54,8 +55,6 @@ interface InventoryProps {
   formatUTCToLocal: (utcDateString: string | Date | undefined) => string;
   handleResetInventoryStocks: () => void;
 }
-
-import { Html5QrcodeScanner, Html5Qrcode } from "html5-qrcode";
 
 const emptyInventoryItem: Omit<InventoryItem, "id" | "stockByLocation"> = {
   name: "",
@@ -637,30 +636,53 @@ const InventoryComponent: React.FC<InventoryProps> = ({
   };
 
   const handleBarcodeScan = (decodedText: string) => {
-    console.log("Código detectado:", decodedText);
-    const item = inventoryItems.find((i) => i.barcode === decodedText);
-
-    if (item) {
-      const qty = window.prompt(
-        `Producto detectado: ${item.name}\nIntroduce la cantidad a sumar:`,
-        "1"
-      );
-      if (qty !== null) {
-        const numericQty = parseDecimal(qty);
-        const updatedStock = {
-          ...item.stockByLocation,
-          Almacén: (Number(item.stockByLocation?.Almacén) || 0) + numericQty,
-        };
-        onSaveInventoryItem({
-          ...item,
-          stockByLocation: updatedStock,
-        });
-        alert(`Añadido ${numericQty} a ${item.name}`);
-      }
-    } else {
-      alert("Código de barras no encontrado: " + decodedText);
+    // 1. EFECTO VISUAL DE ÉXITO (Parpadeo verde)
+    const readerElement = document.getElementById("reader");
+    if (readerElement) {
+      readerElement.classList.add("scan-success");
     }
-    setIsScannerOpen(false);
+
+    // 2. VIBRACIÓN (Feedback táctil pro)
+    if (navigator.vibrate) {
+      navigator.vibrate(100);
+    }
+
+    console.log("Código detectado:", decodedText);
+
+    // 3. PEQUEÑA PAUSA PARA QUE SE VEA EL EFECTO ANTES DEL PROMPT
+    setTimeout(() => {
+      const item = inventoryItems.find((i) => i.barcode === decodedText);
+
+      if (item) {
+        const qty = window.prompt(
+          `✅ PRODUCTO: ${item.name}\n\nIntroduce la cantidad a sumar:`,
+          "1"
+        );
+
+        if (qty !== null) {
+          const numericQty = parseDecimal(qty);
+          const updatedStock = {
+            ...item.stockByLocation,
+            Almacén: (Number(item.stockByLocation?.Almacén) || 0) + numericQty,
+          };
+
+          onSaveInventoryItem({
+            ...item,
+            stockByLocation: updatedStock,
+          });
+
+          alert(`¡Listo! Se han añadido ${numericQty} unidades a ${item.name}`);
+        }
+      } else {
+        alert(
+          "❌ Código de barras no encontrado en el sistema: " + decodedText
+        );
+      }
+
+      // Limpiamos el efecto y cerramos el escáner al terminar
+      if (readerElement) readerElement.classList.remove("scan-success");
+      setIsScannerOpen(false);
+    }, 350); // 350ms es el tiempo ideal para notar el parpadeo verde
   };
 
   // 2. Función de Galería (Safari & Chrome)
@@ -697,11 +719,24 @@ const InventoryComponent: React.FC<InventoryProps> = ({
           scanner = new Html5QrcodeScanner(
             "reader",
             {
-              fps: 15,
-              qrbox: { width: 250, height: 250 },
-              aspectRatio: 1.0,
-              videoConstraints: { facingMode: "environment" },
+              fps: 20,
+              // Forzamos el centrado dinámico del recuadro
+              qrbox: (viewfinderWidth, viewfinderHeight) => {
+                const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                const size = Math.floor(minEdge * 0.7); // El recuadro ocupará el 70% del centro
+                return {
+                  width: size,
+                  height: size,
+                };
+              },
+              aspectRatio: 1.0, // Fuerza el visor a ser cuadrado
+              videoConstraints: {
+                facingMode: "environment",
+                // Añadimos estas restricciones para asegurar que el foco sea central
+                aspectRatio: { ideal: 1.0 },
+              },
               rememberLastUsedCamera: false,
+              showTorchButtonIfSupported: true, // Útil si escaneas en almacenes oscuros
             },
             false
           );
@@ -2835,7 +2870,7 @@ const InventoryComponent: React.FC<InventoryProps> = ({
               {/* Capa Visual: El botón que el usuario ve */}
               <div className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-1 px-3 rounded-lg flex items-center justify-center gap-2 text-sm transition duration-300 h-7 shadow-lg cursor-pointer">
                 <span className="text-base">📷</span>
-                <span className="hidden sm:inline">Foto/Galería Pedido</span>
+                <span className="hidden sm:inline">Foto</span>
               </div>
 
               {/* Capa Funcional: El input real que Safari SÍ reconoce */}
@@ -3352,10 +3387,12 @@ const InventoryComponent: React.FC<InventoryProps> = ({
             </div>
 
             {/* Visor de Cámara */}
-            <div
-              id="reader"
-              className="overflow-hidden rounded-xl border border-slate-700 bg-slate-900 aspect-square w-full mb-6"
-            ></div>
+            <div className="flex flex-col items-center justify-center w-full">
+              <div
+                id="reader"
+                className="overflow-hidden rounded-xl border-2 border-slate-700 bg-slate-900 aspect-square w-full max-w-[300px] mb-6 shadow-inner"
+              ></div>
+            </div>
 
             <div className="relative flex py-2 items-center mb-4">
               <div className="flex-grow border-t border-slate-700"></div>
