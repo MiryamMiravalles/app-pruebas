@@ -1,4 +1,3 @@
-// netlify/functions/models.ts
 import mongoose, { Schema } from "mongoose";
 
 // ----------------------------------------------------
@@ -10,7 +9,7 @@ const InventoryItemSchema = new Schema(
     id: { type: String, required: true, unique: true, index: true },
     name: { type: String, required: true },
     category: String,
-    barcode: { type: String, default: 0 },
+    barcode: { type: String, default: "" },
     pricePerUnitWithoutIVA: { type: Number, required: false, default: 0 },
     stockByLocation: { type: Map, of: Number, minimize: false },
   },
@@ -21,17 +20,15 @@ InventoryItemSchema.set("toJSON", {
   virtuals: true,
   versionKey: false,
   transform: function (doc, ret: any) {
-    // Si usaste el ID del frontend como _id (opción vieja), úsalo. Si no, usa el campo 'id'.
-    // Esta línea simplifica el mapeo para el frontend, que solo necesita `id`.
     ret.id = ret.id;
-    delete ret._id; // Eliminamos el _id interno de Mongoose de la respuesta
+    delete ret._id;
   },
 });
 
 // 🛑 Reforzamiento de campos requeridos para PurchaseOrderSchema
 const PurchaseOrderSchema = new Schema(
   {
-    _id: { type: String, required: true }, // ID generado por el frontend (UUID)
+    _id: { type: String, required: true },
     orderDate: { type: String, required: true },
     deliveryDate: String,
     supplierName: { type: String, required: true },
@@ -41,12 +38,12 @@ const PurchaseOrderSchema = new Schema(
       {
         inventoryItemId: { type: String, required: true },
         quantity: { type: Number, required: true, min: 0 },
-        costAtTimeOfPurchase: { type: Number, default: 0 }, // Establece default=0 para que no sea requerido si no se envía
-        pricePerUnitWithoutIVA: { type: Number, default: 0 }, // 🛑 AÑADIDO: Precio en el momento del pedido
+        costAtTimeOfPurchase: { type: Number, default: 0 },
+        pricePerUnitWithoutIVA: { type: Number, default: 0 },
       },
     ],
   },
-  // 🛑 CORRECCIÓN DE BUENA PRÁCTICA: Se eliminó `_id: false`. Si _id está definido como String, Mongoose lo respeta.
+
   { timestamps: true }
 );
 
@@ -74,7 +71,7 @@ const InventoryRecordItemSchema = new Schema(
     consumption: Number,
     stockByLocationSnapshot: { type: Map, of: Number, minimize: false },
   },
-  { _id: false } // Mantenido para sub-documentos si no se usa ID
+  { _id: false }
 );
 
 // Esquema completo para InventoryRecord
@@ -86,7 +83,7 @@ const InventoryRecordSchema = new Schema(
     type: String,
     items: [InventoryRecordItemSchema],
   },
-  // 🛑 CORRECCIÓN DE BUENA PRÁCTICA: Se eliminó `_id: false`. Si _id está definido como String, Mongoose lo respeta.
+
   { timestamps: true }
 );
 
