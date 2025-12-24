@@ -3387,10 +3387,6 @@ const InventoryComponent: React.FC<InventoryProps> = ({
                 style={{ WebkitTapHighlightColor: "transparent" }}
               />
             </div>
-
-            <p className="mt-4 text-[10px] text-center text-slate-500 italic">
-              Nota: En iPhone, selecciona "Fototeca" para abrir tu galería.
-            </p>
           </div>
         </div>
       )}
