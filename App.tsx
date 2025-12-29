@@ -1926,28 +1926,6 @@ const App: React.FC = () => {
     [deleteItem]
   );
 
-  // --- API Handler para Borrar Todo el Historial ---
-  const handleDeleteAllHistoryRecords = useCallback(async () => {
-    if (
-      !window.confirm(
-        "ADVERTENCIA: ¿Está seguro de que desea eliminar TODO el historial de inventario y análisis de consumo? Esta acción es irreversible."
-      )
-    ) {
-      return;
-    }
-    try {
-      await api.history.deleteAll();
-      setInventoryHistory([]);
-    } catch (e) {
-      console.error("Error deleting all history:", e);
-      alert(
-        `Error al eliminar todo el historial: ${
-          e instanceof Error ? e.message : "Error desconocido"
-        }`
-      );
-    }
-  }, []);
-
   // API Handler para Borrar un Registro Individual del Historial
   const handleDeleteInventoryRecord = useCallback(
     async (id: string) => {
@@ -2180,7 +2158,6 @@ const App: React.FC = () => {
         onBulkUpdateInventoryItems={handleBulkUpdateInventoryItems}
         inventoryHistory={inventoryHistory}
         onSaveInventoryRecord={handleSaveInventoryRecord}
-        onDeleteAllInventoryRecords={handleDeleteAllHistoryRecords}
         onDeleteInventoryRecord={handleDeleteInventoryRecord}
         onDownloadHistoryRecord={handleDownloadHistoryRecord}
         activeTab={activeView}

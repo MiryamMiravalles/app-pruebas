@@ -3362,16 +3362,13 @@ const InventoryComponent: React.FC<InventoryProps> = ({
         <div className="bg-gray-800 shadow-xl rounded-lg p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-white">Historial 📊</h2>
-            <button
-              onClick={handleDeleteAllHistory}
-              className="bg-red-600 hover:bg-red-700 text-white font-medium py-1 px-3 rounded-lg flex items-center gap-1.5 text-sm transition duration-300"
-            >
-              <TrashIcon /> Borrar Historial
-            </button>
+            {/* Se ha eliminado el botón de handleDeleteAllHistory que estaba aquí */}
           </div>
+
           <h3 className="text-l font-bold text-white mb-3 mt-8 border-t border-gray-700 pt-4">
             Registros Anteriores
           </h3>
+
           {(validInventoryHistory as any[]).length > 0 ? (
             <ul className="space-y-3">
               {(validInventoryHistory as any[]).map(
@@ -3395,7 +3392,7 @@ const InventoryComponent: React.FC<InventoryProps> = ({
                       >
                         Ver Detalles
                       </button>
-                      {/* Botón Borrar Registro Individual */}
+                      {/* Botón Borrar Registro Individual (Se mantiene por seguridad de gestión individual) */}
                       <button
                         onClick={() => handleDeleteRecord(record)}
                         className="bg-red-600 hover:bg-red-700 text-white text-sm font-bold py-1 px-4 rounded-lg flex items-center justify-center transition duration-300"
