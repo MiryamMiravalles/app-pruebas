@@ -515,15 +515,13 @@ const InventoryComponent: React.FC<InventoryProps> = ({
   handleResetInventoryStocks,
   activeTab,
 }) => {
+  // 1. Estados de Modales y Artículos
   const [isInventoryModalOpen, setInventoryModalOpen] = useState(false);
   const [currentInventoryItem, setCurrentInventoryItem] =
     useState<Partial<InventoryItem>>(emptyInventoryItem);
-
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [scannedResult, setScannedResult] = useState<string | null>(null);
-  const scannerRef = useRef<HTMLDivElement>(null);
   const [tempPriceString, setTempPriceString] = useState("");
 
+  // 2. Estados de Pedidos
   const [isOrderModalOpen, setOrderModalOpen] = useState(false);
   const [currentPurchaseOrder, setCurrentPurchaseOrder] = useState<
     PurchaseOrder | Omit<PurchaseOrder, "id">
@@ -531,25 +529,39 @@ const InventoryComponent: React.FC<InventoryProps> = ({
   const [tempOrderQuantities, setTempOrderQuantities] = useState<
     Record<number, string>
   >({});
-
-  const [tempStockValues, setTempStockValues] = useState<
-    Record<string, string>
-  >({});
   const [tempOrderPrices, setTempOrderPrices] = useState<
     Record<number, string>
   >({});
-  const [analysisDate, setAnalysisDate] = useState("");
 
+  // 3. Estados de Inventario y Filtros (DEFINIR ANTES QUE EL REF)
+  const [tempStockValues, setTempStockValues] = useState<
+    Record<string, string>
+  >({});
   const [searchTerm, setSearchTerm] = useState("");
   const [orderSearchTerm, setOrderSearchTerm] = useState("");
-
-  const [viewingRecord, setViewingRecord] = useState<InventoryRecord | null>(
-    null
-  );
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedLocationColumn, setSelectedLocationColumn] = useState<
     string | "all"
   >("all");
+
+  // 4. Referencias (REFS)
+  // Ahora selectedLocationColumn ya existe, por lo que no dará error
+  const selectedLocationRef = useRef(selectedLocationColumn);
+  const scannerRef = useRef<HTMLDivElement>(null);
+
+  // 5. Sincronización del Ref
+  useEffect(() => {
+    selectedLocationRef.current = selectedLocationColumn;
+  }, [selectedLocationColumn]);
+
+  // 6. Resto de estados
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scannedResult, setScannedResult] = useState<string | null>(null);
+  const [analysisDate, setAnalysisDate] = useState("");
+  const [viewingRecord, setViewingRecord] = useState<InventoryRecord | null>(
+    null
+  );
+
   // Localiza donde se recibe el nombre del proveedor de la foto
   const processOcrResult = (detectedSupplier: string) => {
     const formattedSupplier = formatToTitleCase(detectedSupplier);
@@ -681,73 +693,56 @@ const InventoryComponent: React.FC<InventoryProps> = ({
 
     setTimeout(async () => {
       const scannedBarcode = String(decodedText).trim();
-
-      // 2. Buscamos si el producto ya existe en el inventario
       let item = inventoryItems.find(
         (i) => String(i.barcode || "").trim() === scannedBarcode
       );
 
-      // 3. Si NO existe, entramos en el flujo de Vinculación o Creación
+      // Flujo de creación/vinculación (si no existe)
       if (!item) {
         const wantsToLink = window.confirm(
-          `❓ CÓDIGO NUEVO: ${scannedBarcode}\n\nEste código no tiene producto asignado. ¿Quieres vincularlo a uno que YA EXISTE?`
+          `❓ CÓDIGO NUEVO: ${scannedBarcode}\n¿Vincular a producto existente?`
         );
-
         if (wantsToLink) {
-          // VINCULAR A EXISTENTE
-          const searchName = window.prompt(
-            "Escribe el nombre del producto para buscarlo:"
-          );
+          const searchName = window.prompt("Escribe el nombre:");
           if (!searchName) {
             setIsScannerOpen(false);
             return;
           }
-
           const matches = inventoryItems.filter((i) =>
             i.name.toLowerCase().includes(searchName.toLowerCase())
           );
-
           if (matches.length === 0) {
-            alert("No se encontró ningún producto.");
+            alert("No encontrado");
             setIsScannerOpen(false);
             return;
           }
-
-          const selectionMsg = matches
-            .slice(0, 15)
-            .map((i, idx) => `${idx + 1}. ${i.name}`)
-            .join("\n");
           const selection = window.prompt(
-            `Selecciona el producto:\n${selectionMsg}`,
+            matches
+              .slice(0, 15)
+              .map((i, idx) => `${idx + 1}. ${i.name}`)
+              .join("\n"),
             "1"
           );
-
           if (selection) {
             const selectedItem = matches[parseInt(selection) - 1];
             if (selectedItem) {
-              // Creamos la versión con el nuevo barcode
               item = { ...selectedItem, barcode: scannedBarcode };
-              // Guardamos la vinculación en la DB
               onSaveInventoryItem(item);
             }
           }
         } else {
-          // CREAR PRODUCTO TOTALMENTE NUEVO
-          const confirmCreate = window.confirm(
-            "¿Deseas dar de alta este producto como uno nuevo?"
-          );
+          const confirmCreate = window.confirm("¿Crear producto nuevo?");
           if (confirmCreate) {
-            const newName = window.prompt("Nombre del nuevo producto:");
+            const newName = window.prompt("Nombre:");
             if (newName) {
               const catIndex = window.prompt(
-                `Selecciona CATEGORÍA:\n` +
+                `Categoría:\n` +
                   CATEGORY_ORDER.map((c, i) => `${i + 1}. ${c}`).join("\n"),
                 "1"
               );
               const selectedCat =
                 CATEGORY_ORDER[parseInt(catIndex || "1") - 1] ||
                 CATEGORY_ORDER[0];
-
               const newItem: InventoryItem = {
                 id: crypto.randomUUID(),
                 name: newName.trim(),
@@ -761,36 +756,42 @@ const InventoryComponent: React.FC<InventoryProps> = ({
               };
               item = newItem;
               onSaveInventoryItem(newItem);
-              alert(`✨ ¡Registrado! ${newName}`);
             }
           }
         }
       }
 
-      // 4. FLUJO FINAL: Si tenemos un producto (porque ya existía o lo acabamos de crear/vincular)
+      // FLUJO FINAL: UBICACIÓN INTELIGENTE
       if (item) {
         setIsScannerOpen(false);
+        let selectedLoc: string | null = null;
+        const currentSelection = selectedLocationRef.current; // Usamos el Ref
 
-        const locIndex = window.prompt(
-          `📍 GESTIONAR STOCK: ${item.name.toUpperCase()}\n\n` +
-            `Selecciona dónde añadir cantidad:\n` +
-            INVENTORY_LOCATIONS.map((l, i) => `${i + 1}. ${l}`).join("\n"),
-          "1"
-        );
-
-        if (locIndex !== null) {
-          const selectedLoc =
-            INVENTORY_LOCATIONS[parseInt(locIndex) - 1] ||
-            INVENTORY_LOCATIONS[0];
-          const qty = window.prompt(
-            `¿Qué cantidad vas a añadir en ${selectedLoc}?`,
+        if (currentSelection !== "all") {
+          selectedLoc = currentSelection;
+        } else {
+          const locIndex = window.prompt(
+            `📍 GESTIONAR STOCK: ${item.name.toUpperCase()}\n\nSelecciona ubicación:\n` +
+              INVENTORY_LOCATIONS.map((l, i) => `${i + 1}. ${l}`).join("\n"),
             "1"
           );
+          if (locIndex !== null) {
+            selectedLoc =
+              INVENTORY_LOCATIONS[parseInt(locIndex) - 1] ||
+              INVENTORY_LOCATIONS[0];
+          }
+        }
 
+        if (selectedLoc) {
+          const qty = window.prompt(
+            `Añadiendo a: ${selectedLoc.toUpperCase()}\nProducto: ${
+              item.name
+            }\n\n¿Cantidad?`,
+            "1"
+          );
           if (qty !== null && qty.trim() !== "") {
             const numericQty = parseDecimal(qty);
-
-            const updatedItem = {
+            onSaveInventoryItem({
               ...item,
               stockByLocation: {
                 ...item.stockByLocation,
@@ -801,10 +802,8 @@ const InventoryComponent: React.FC<InventoryProps> = ({
                   ).toFixed(2)
                 ),
               },
-            };
-
-            onSaveInventoryItem(updatedItem);
-            alert(`✅ Stock actualizado en ${selectedLoc}: ${item.name}`);
+            });
+            alert(`✅ Stock actualizado en ${selectedLoc}`);
           }
         }
       } else {
@@ -814,7 +813,6 @@ const InventoryComponent: React.FC<InventoryProps> = ({
       if (container) container.classList.remove("scan-success-border");
     }, 500);
   };
-
   // 2. Función de Galería (Safari & Chrome)
   const handleBarcodeFromGallery = async (
     e: React.ChangeEvent<HTMLInputElement>
@@ -822,65 +820,48 @@ const InventoryComponent: React.FC<InventoryProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Usamos el visor existente "reader" pero asegurándonos de que esté limpio
     const html5QrCode = new Html5Qrcode("reader");
-
     try {
       const decodedText = await html5QrCode.scanFile(file, true);
+      // Al llamar a esta función, usará el Ref de ubicación automáticamente
       handleBarcodeScan(decodedText);
     } catch (err) {
-      alert("No se detectó código. Intenta con una foto más clara y nítida.");
+      alert("No se detectó código. Intenta con una foto más clara.");
       console.error(err);
     } finally {
       if (e.target) e.target.value = "";
     }
   };
 
+  // --- 3. EFECTO DE LA CÁMARA ---
   useEffect(() => {
     let html5QrCode: Html5Qrcode | null = null;
-
     if (isScannerOpen) {
       const timeoutId = setTimeout(async () => {
         const element = document.getElementById("reader");
         if (!element) return;
-
-        // Usamos la versión limpia de la librería
         html5QrCode = new Html5Qrcode("reader");
-
-        const config = {
-          fps: 20,
-          qrbox: { width: 250, height: 250 },
-          aspectRatio: 1.0,
-        };
-
         try {
           await html5QrCode.start(
             { facingMode: "environment" },
-            config,
+            { fps: 20, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
             (decodedText) => {
               handleBarcodeScan(decodedText);
-              // Detenemos la cámara tras el éxito
-              if (html5QrCode) {
-                html5QrCode.stop().catch((err) => console.error(err));
-              }
+              if (html5QrCode) html5QrCode.stop().catch(console.error);
             },
-            () => {
-              /* Escaneando... */
-            }
+            () => {}
           );
         } catch (err) {
-          console.error("No se pudo iniciar la cámara:", err);
+          console.error(err);
         }
       }, 500);
-
       return () => {
         clearTimeout(timeoutId);
-        if (html5QrCode && html5QrCode.isScanning) {
-          html5QrCode.stop().catch((err) => console.error(err));
-        }
+        if (html5QrCode?.isScanning) html5QrCode.stop().catch(console.error);
       };
     }
   }, [isScannerOpen]);
+
   const calculateTotalStock = (item: InventoryItem) => {
     if (!item.stockByLocation) return 0;
     // Aseguramos que los valores son tratados como números para la suma.
